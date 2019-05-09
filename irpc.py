@@ -158,17 +158,15 @@ class ProvDef(FuncDef):
     @cached_property   
     def d_entity_compound(self) -> Dict[EntityName, Set[Compound]]:
        "Filter the dictionary of IdName to only the Entity"
-       # Can be done directly inside IdName2Compound_rec
-       return {k : [v] for k,v in Entity2Compound(self.funcdef.body, self.entity_to_potentially_provide).items() }
+       return Entity2Compound(self.funcdef.body, self.entity_to_potentially_provide)
 
     @cached_property
     def d_compound_entity(self) ->  Dict[Compound, Set[EntityName]]:
         from collections import defaultdict
         d_compound_entity = defaultdict(set)
 
-        for name, lc, in self.d_entity_compound.items():
-            for c in lc:
-                d_compound_entity[c].add(name)
+        for name, c, in self.d_entity_compound.items():
+             d_compound_entity[c].add(name)
 
         return d_compound_entity
 
@@ -270,6 +268,11 @@ class TestBinding(unittest.TestCase):
         #return {k: v[0] for k,v in IdName2Compound_rec(ast.ext[0].body, argv).items() }
         return Entity2Compound(ast.ext[0].body, argv)
 
+#  __                   
+# (_  o ._ _  ._  |  _  
+# __) | | | | |_) | (/_ 
+#             |         
+
     def test_simple(self):
         src= 'void foo(){ a = b;}'''
         d = self.src2d(src, ['b'])
@@ -279,6 +282,11 @@ class TestBinding(unittest.TestCase):
         src= 'void foo(){ a = f(b);}'
         d = self.src2d(src, ['b'])
         assert ( d['b'].block_items[0].lvalue.name == 'a')
+
+#  _                                   
+# /   _  ._   _| o _|_ o  _  ._   _. | 
+# \_ (_) | | (_| |  |_ | (_) | | (_| | 
+#                                      
 
     def test_conditional_one_branch(self):
         src= 'void foo() { if (_) { a = b; } }'
@@ -328,12 +336,20 @@ void foo() {
         d = self.src2d(src, ['b','c'])
         assert ( d['b'].block_items[0].lvalue.name == 'b')
         assert ( d['c'].block_items[0].lvalue.name == 'a')
-
+#  _       
+# |_ _  ._ 
+# | (_) |  
+#          
     def test_for(self):
         src= ' void foo() { for (i=1; i <10 ; i++ ) { bar(b); } }'
         d = self.src2d(src, ['b'])
         assert ( type(d['b'].block_items[0]) == For)
 
+#                         
+# |\ |  _   _ _|_  _   _| 
+# | \| (/_ _>  |_ (/_ (_| 
+#                         
+#
     def test_nested_compound(self):
         src= '''
 void foo() {
@@ -402,7 +418,24 @@ void foo() {
         assert ( d['a'].block_items[0].lvalue.name == 'x')
         assert ( d['b'].block_items[0].lvalue.name == 'x')
 
-    @unittest.skip('cannot be in two scope')
+#          _                               
+# |\ | __ /   _  ._ _  ._   _      ._   _| 
+# | \|    \_ (_) | | | |_) (_) |_| | | (_| 
+#                      |                   
+
+    @unittest.skip('Not yet support')
+    def test_nested_if_else_2(self):
+        src= '''
+void foo() {
+    { x = a; } 
+    { y = a; }
+}'''
+        d = self.src2d(src, ['a'])
+
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['a'][1].block_items[0].lvalue.name == 'y')
+
+    @unittest.skip('Not yet support')
     def test_nested_if_else_2(self):
         src= '''
 void foo() {
@@ -411,10 +444,12 @@ void foo() {
    } else { y = a; }
 }'''
         d = self.src2d(src, ['a'])
-        assert ( d['a'].block_items[0].lvalue.name == 'x')
+        
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['a'][1].block_items[0].lvalue.name == 'y')
 
 
-#-
+
 if __name__ == "__main__":
 
     try:
