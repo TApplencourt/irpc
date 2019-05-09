@@ -94,6 +94,8 @@ def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound
     return d
 
 def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
+    # TODO:- Fix when and when no append when updating the dictionary
+    #      - Add more doc
 
     l = compound.block_items
     head =  [x for x in l if not isinstance(x,(If,For))]
