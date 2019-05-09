@@ -58,6 +58,16 @@ class cached_property(object):
 #       If the same variable is used in only A statements, we bind it to all the A statements 
 #       If the same variable is used in B and A statements, we bind it the first B statements who enclose the A staments. 
 #
+def update(d_ref,d, append=True):
+        # If the value is alread present, don't overwrite it
+        for k,v in d.items():
+            if k not in d_ref:
+                d_ref[k] = v
+            elif append:
+                d_ref[k].extend(v)
+
+        return d_ref
+
 def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound]:
     'All the entity inside a compound are bound to this compound'
      
@@ -76,21 +86,14 @@ def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound
         elif isinstance(node, ExprList):
             l_node_to_recurse |= set(node.exprs)
         elif isinstance(node, Compound):
-            d.update(Entity2Compound(node, nodes_aloyed))
+            update(d,Entity2Compound(node, nodes_aloyed),True)
 
     if l_node_to_recurse:
-        d.update(EntityInCompound_rec(l_node_to_recurse, nodes_aloyed, compound))
+        update(d,EntityInCompound_rec(l_node_to_recurse, nodes_aloyed, compound))
 
     return d
 
 def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
-    
-    def update(d_ref,d):
-        # If the value is alread present, don't overwrite it
-        for k,v in d.items():
-            if k not in d_ref:
-                d_ref[k] = v 
-        return d_ref
 
     l = compound.block_items
     head =  [x for x in l if not isinstance(x,(If,For))]
@@ -115,10 +118,10 @@ def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
         update(d, EntityInCompound_rec([i.cond],l_entity, compound))
       
         d_t = EntityInCompound_rec([i.iftrue], l_entity, i.iftrue)
-        update(d, {k:v for k,v in d_t.items() if i.iftrue not in v} )
+        update(d, {k:v for k,v in d_t.items() if i.iftrue not in v}, False )
         
         d_f = EntityInCompound_rec([i.iffalse], l_entity, i.iffalse) if i.iffalse else {}
-        update(d, {k:v for k,v in d_f.items() if i.iffalse not in v} )
+        update(d, {k:v for k,v in d_f.items() if i.iffalse not in v}, False )
 
         
         l_entity_t = set(k for k,v in d_t.items() if i.iftrue in v)
@@ -263,11 +266,11 @@ class IRPc(object):
 import unittest
 class TestBinding(unittest.TestCase):
 
+    parser = c_parser.CParser()
+
     def src2d(self,src, argv):
-        parser = c_parser.CParser()
-        ast = parser.parse(src)
-        return {k: v[0] for k,v in Entity2Compound(ast.ext[0].body, argv).items() }
-        #return Entity2Compound(ast.ext[0].body, argv)
+        ast = self.parser.parse(src)
+        return Entity2Compound(ast.ext[0].body, argv)
 
 #  __                   
 # (_  o ._ _  ._  |  _  
@@ -275,91 +278,125 @@ class TestBinding(unittest.TestCase):
 #             |         
 
     def test_simple(self):
-        src= 'void foo(){ a = b;}'''
-        d = self.src2d(src, ['b'])
-        assert ( d['b'].block_items[0].lvalue.name == 'a')
+        src= 'void foo(){ _ = a;}'''
+        d = self.src2d(src, ['a'])
+        assert ( d['a'][0].block_items[0].lvalue.name == '_')
+
+    def test_multiple_entity(self):
+        src= 'void foo(){ _ = a + a ;}'''
+        d = self.src2d(src, ['a'])
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].lvalue.name == '_')
 
     def test_simple_function(self):
-        src= 'void foo(){ a = f(b);}'
-        d = self.src2d(src, ['b'])
-        assert ( d['b'].block_items[0].lvalue.name == 'a')
+        src= 'void foo(){ _ = f(a);}'
+        d = self.src2d(src, ['a'])
+        assert ( d['a'][0].block_items[0].lvalue.name == '_')
+
+    def test_simple_expresion(self):
+        src= 'void foo(){ _ = a+1 ;}'
+        d = self.src2d(src, ['a'])
+        assert ( d['a'][0].block_items[0].lvalue.name == '_')
+
+    def test_function_expresion(self):
+        src= 'void foo(){ _ = foo(a+1) ;}'
+        d = self.src2d(src, ['a'])
+        assert ( d['a'][0].block_items[0].lvalue.name == '_')
 
 #  _                                   
 # /   _  ._   _| o _|_ o  _  ._   _. | 
 # \_ (_) | | (_| |  |_ | (_) | | (_| | 
 #                                      
+    def test_conditional_host_condition(self):
+        src= 'void foo() { if (a) { _; } }'
+        d = self.src2d(src, ['a'])
+        assert ( type(d['a'][0].block_items[0]) == If)
 
     def test_conditional_one_branch(self):
-        src= 'void foo() { if (_) { a = b; } }'
-        d = self.src2d(src, ['b'])
-        assert ( d['b'].block_items[0].lvalue.name == 'a')
-
-    def test_conditional_one_branch_condition(self):
-        src= 'void foo() { if (c) { a = b; } }'
-        d = self.src2d(src, ['c'])
-        assert ( type(d['c'].block_items[0]) == If)
+        src= 'void foo() { if (_) { x = a; } }'
+        d = self.src2d(src, ['a'])
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
 
     def test_conditional(self):
-        src= 'void foo() { if (_) { a = b; } else { a = c ; } }'
-        d = self.src2d(src, ['b','c'])
-        assert ( d['b'].block_items[0].lvalue.name == 'a')
-        assert ( d['c'].block_items[0].lvalue.name == 'a')
+        src= 'void foo() { if (_) { x = a; } else { y = b ; } }'
+        d = self.src2d(src, ['a','b'])
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['b'][0].block_items[0].lvalue.name == 'y')
 
     def test_conditional_hosting(self):
-        src= 'void foo() { if (_) { a = b; } else { a = (b + 1) ; } }'
-        d = self.src2d(src, ['b'])
-        assert ( type(d['b'].block_items[0]) == If)
+        src= 'void foo() { if (_) { x = a; } else { y = a ; } }'
+        d = self.src2d(src, ['a'])
+        assert ( len(d['a']) == 1)
+        assert ( type(d['a'][0].block_items[0]) == If)
 
     def test_conditional_one_branch_hosting_before(self):
         src= '''
 void foo() {
-   b = 10;
-   if (_) { a = b; }
+   x = a;
+   if (_) { y = a; }
 }'''
-        d = self.src2d(src, ['b'])
-        assert ( d['b'].block_items[0].lvalue.name == 'b')
+        d = self.src2d(src, ['a'])
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
 
     def test_conditional_one_branch_hosting_after(self):
         src= '''
 void foo() {
-   if (_) { a = b; }
-   b = 10;
+   if (_) { y = a; }
+   x = a;
 }'''
-        d = self.src2d(src, ['b'])
-        assert ( type(d['b'].block_items[0]) == If)
+        d = self.src2d(src, ['a'])
+        assert ( len(d['a']) == 1)
+        assert ( type(d['a'][0].block_items[0]) == If)
 
     def test_conditional_two_branch_hosting_before(self):
         src= '''
 void foo() {
-   b = 10;
-   if (_) { a = b; } else { a = c; }
+   x = a ;
+   if (_) { y = a; } else { z = b; }
 }'''
-        d = self.src2d(src, ['b','c'])
-        assert ( d['b'].block_items[0].lvalue.name == 'b')
-        assert ( d['c'].block_items[0].lvalue.name == 'a')
+        d = self.src2d(src, ['a','b'])
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['b'][0].block_items[0].lvalue.name == 'z')
+
 #  _       
 # |_ _  ._ 
 # | (_) |  
 #          
     def test_for(self):
-        src= ' void foo() { for (i=1; i <10 ; i++ ) { bar(b); } }'
-        d = self.src2d(src, ['b'])
-        assert ( type(d['b'].block_items[0]) == For)
+        src= ' void foo() { for  (_; _; _ ) { a; } }'
+        d = self.src2d(src, ['a'])
+        assert ( type(d['a'][0].block_items[0]) == For)
+
+    def test_for_host1(self):
+        src= ' void foo() { for  (a; _; _ ) { _; } }'
+        d = self.src2d(src, ['a'])
+        assert ( type(d['a'][0].block_items[0]) == For)
+
+    def test_for_host2(self):
+        src= ' void foo() { for  (_; a; _ ) { _; } }'
+        d = self.src2d(src, ['a'])
+        assert ( type(d['a'][0].block_items[0]) == For)
+
+    def test_for_host3(self):
+        src= ' void foo() { for  (_; _; a ) { _; } }'
+        d = self.src2d(src, ['a'])
+        assert ( type(d['a'][0].block_items[0]) == For)
 
 #                         
 # |\ |  _   _ _|_  _   _| 
 # | \| (/_ _>  |_ (/_ (_| 
 #                         
-#
     def test_nested_compound(self):
         src= '''
 void foo() {
-   x = b;
-   { y = c; }
+   x = a;
+   { y = b; }
 }'''
-        d = self.src2d(src, ['b','c'])
-        assert ( d['b'].block_items[0].lvalue.name == 'x')
-        assert ( d['c'].block_items[0].lvalue.name == 'y')
+        d = self.src2d(src, ['a','b'])
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['b'][0].block_items[0].lvalue.name == 'y')
 
 
     def test_nested_if(self):
@@ -371,8 +408,8 @@ void foo() {
    }
 }'''
         d = self.src2d(src, ['a','b'])
-        assert ( d['a'].block_items[0].lvalue.name == 'x')
-        assert ( d['b'].block_items[0].lvalue.name == 'y')
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['b'][0].block_items[0].lvalue.name == 'y')
 
     def test_nested_if_hosting(self):
         src= '''
@@ -383,7 +420,8 @@ void foo() {
    }
 }'''
         d = self.src2d(src, ['a'])
-        assert ( d['a'].block_items[0].lvalue.name == 'x')
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
 
     def test_nested_if_super_hosting_before(self):
         src= '''
@@ -394,7 +432,8 @@ void foo() {
    }
 }'''
         d = self.src2d(src, ['a'])
-        assert ( d['a'].block_items[0].lvalue.name == 'x')
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
 
     def test_nested_if_super_hosting_after(self):
         src= '''
@@ -405,7 +444,8 @@ void foo() {
    x = a;
 }'''
         d = self.src2d(src, ['a'])
-        assert ( type(d['a'].block_items[0]) == If )
+        assert ( len(d['a']) == 1)
+        assert ( type(d['a'][0].block_items[0]) == If )
 
     def test_nested_if_for(self):
         src= '''
@@ -416,27 +456,25 @@ void foo() {
    }
 }'''
         d = self.src2d(src, ['a','b'])
-        assert ( d['a'].block_items[0].lvalue.name == 'x')
-        assert ( d['b'].block_items[0].lvalue.name == 'x')
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['b'][0].block_items[0].lvalue.name == 'x')
 
 #          _                               
 # |\ | __ /   _  ._ _  ._   _      ._   _| 
 # | \|    \_ (_) | | | |_) (_) |_| | | (_| 
 #                      |                   
 
-    @unittest.skip('Not yet support')
-    def test_nested_if_else_2(self):
+    def test_simple_compound(self):
         src= '''
 void foo() {
     { x = a; } 
     { y = a; }
 }'''
         d = self.src2d(src, ['a'])
-
+        assert ( len(d['a']) == 2)
         assert ( d['a'][0].block_items[0].lvalue.name == 'x')
         assert ( d['a'][1].block_items[0].lvalue.name == 'y')
 
-    @unittest.skip('Not yet support')
     def test_nested_if_else_2(self):
         src= '''
 void foo() {
@@ -445,7 +483,7 @@ void foo() {
    } else { y = a; }
 }'''
         d = self.src2d(src, ['a'])
-        
+        assert ( len(d['a']) == 2)
         assert ( d['a'][0].block_items[0].lvalue.name == 'x')
         assert ( d['a'][1].block_items[0].lvalue.name == 'y')
 
