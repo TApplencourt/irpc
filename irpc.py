@@ -137,6 +137,14 @@ def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
 
     return d
 
+#______               _     _           
+#| ___ \             (_)   | |          
+#| |_/ / __ _____   ___  __| | ___ _ __ 
+#|  __/ '__/ _ \ \ / / |/ _` |/ _ \ '__|
+#| |  | | | (_) \ V /| | (_| |  __/ |   
+#\_|  |_|  \___/ \_/ |_|\__,_|\___|_|   
+#                                       
+
 def provider_name(funcdef):
     if funcdef.decl.name.startswith('provide_'):
         return funcdef.decl.name.split('provide_')[-1]
@@ -214,6 +222,13 @@ class ProvDef(FuncDef):
     def entity_decl(self):
         return self.ast_with_provider_decl[1]
 
+# _    _                                        
+#| |  | |                                       
+#| |  | | __ _ _ __   _ __ ___   ___  _ __ ___  
+#| |/\| |/ _` | '__| | '__/ _ \ / _ \| '_ ` _ \ 
+#\  /\  / (_| | |    | | | (_) | (_) | | | | | |
+# \/  \/ \__,_|_|    |_|  \___/ \___/|_| |_| |_|
+#                                               
 
 class IRPc(object):
 
