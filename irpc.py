@@ -66,7 +66,7 @@ def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound
     for node in l_node:
         if isinstance(node, ID):
             if node.name in nodes_aloyed:
-                d[node.name] = compound
+                d[node.name] = [ compound ]
         elif isinstance(node, BinaryOp):
             l_node_to_recurse |= { node.left, node.right }
         elif isinstance(node, Assignment):
@@ -89,7 +89,7 @@ def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
         # If the value is alread present, don't overwrite it
         for k,v in d.items():
             if k not in d_ref:
-                d_ref[k] = v
+                d_ref[k] = v 
         return d_ref
 
     l = compound.block_items
@@ -115,22 +115,22 @@ def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
         update(d, EntityInCompound_rec([i.cond],l_entity, compound))
       
         d_t = EntityInCompound_rec([i.iftrue], l_entity, i.iftrue)
-        update(d, {k:v for k,v in d_t.items() if v != i.iftrue} )
+        update(d, {k:v for k,v in d_t.items() if i.iftrue not in v} )
         
         d_f = EntityInCompound_rec([i.iffalse], l_entity, i.iffalse) if i.iffalse else {}
-        update(d, {k:v for k,v in d_f.items() if v != i.iffalse} )
+        update(d, {k:v for k,v in d_f.items() if i.iffalse not in v} )
 
         
-        l_entity_t = set(k for k,v in d_t.items() if v == i.iftrue )
-        l_entity_f = set(k for k,v in d_f.items() if v == i.iffalse )
+        l_entity_t = set(k for k,v in d_t.items() if i.iftrue in v)
+        l_entity_f = set(k for k,v in d_f.items() if i.iffalse in v)
 
         # The entity who are in both branch bellong to the current compound 
-        update(d, {e: compound for e in l_entity_t & l_entity_f} )
+        update(d, {e: [compound] for e in l_entity_t & l_entity_f} )
         
         # Update the rest with the correct compound
-        entity = set(k for k,v in d.items() if v == compound ) 
-        update(d, {e:i.iftrue for e in l_entity_t - entity} )
-        update(d, {e:i.iffalse for e in l_entity_f- entity} )
+        entity = set(k for k,v in d.items() if compound in v ) 
+        update(d, {e: [i.iftrue] for e in l_entity_t - entity} )
+        update(d, {e: [i.iffalse] for e in l_entity_f- entity} )
 
     return d
 
@@ -165,8 +165,9 @@ class ProvDef(FuncDef):
         from collections import defaultdict
         d_compound_entity = defaultdict(set)
 
-        for name, c, in self.d_entity_compound.items():
-             d_compound_entity[c].add(name)
+        for name, lc, in self.d_entity_compound.items():
+            for c in lc:
+                d_compound_entity[c].add(name)
 
         return d_compound_entity
 
@@ -265,8 +266,8 @@ class TestBinding(unittest.TestCase):
     def src2d(self,src, argv):
         parser = c_parser.CParser()
         ast = parser.parse(src)
-        #return {k: v[0] for k,v in IdName2Compound_rec(ast.ext[0].body, argv).items() }
-        return Entity2Compound(ast.ext[0].body, argv)
+        return {k: v[0] for k,v in Entity2Compound(ast.ext[0].body, argv).items() }
+        #return Entity2Compound(ast.ext[0].body, argv)
 
 #  __                   
 # (_  o ._ _  ._  |  _  
