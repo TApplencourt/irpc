@@ -20,7 +20,7 @@ class cached_property(object):
      A property that is only computed once per instance and then replaces itself
      with an ordinary attribute. Deleting the attribute resets the property.
      Source: https://github.com/bottlepy/bottle/commit/fa7733e075da0d790d809aa3d2f53071897e6f76
-     """  # noqa
+     """ 
 
      def __init__(self, func):
          self.__doc__ = getattr(func, '__doc__')
@@ -32,46 +32,107 @@ class cached_property(object):
          value = obj.__dict__[self.func.__name__] = self.func(obj)
 
          return value
-#                  
-# |\/|  _   _. _|_ 
-# |  | (/_ (_|  |_ 
-#                  
-def IdName2Compound_rec(node: AstNode, 
-                      d_id: Dict[IdName,Compound],
-                      d_lvl: Dict[IdName,int], 
-                      compound = None, save_next_compound = True, lvl = 0):
-        """Binding the entity to the compound
-        Perform hoisting. Only the coumpound at the lower level is saved.
-        """             
-        l_node = set ()
 
+
+#       __ ___    _                       
+#  /\  (_   |    | \  _   _  _  _  ._ _|_ 
+# /--\ __)  |    |_/ (/_ _> (_ (/_ | | |_ 
+#                                         
+
+# AST of one function:
+# The goal is to find all the entity utilization and to bind it to the compound-statements.
+# A compound-statement can be a : - the body of the function,
+#                                 - the body of if/else statement
+#                                 - the body of the forloop
+
+# Notes:
+#    - Variable can be used multiple time in the same compound
+#    - Variable can be used in multiple compound
+#
+# 1/ Variable can be used multiple time in the same compound
+#   - No problem
+# 2/ Variable can be used in multiple compound.
+#    We distinguish two types of compound: the one leaving inside conditional statement (A) and the other (B).
+#    Rule:
+#       If the same variable is used in only B statement, we bind it to all the B statements.
+#       If the same variable is used in only A statements, we bind it to all the A statements 
+#       If the same variable is used in B and A statements, we bind it the first B statements who enclose the A staments. 
+#
+def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound]:
+    'All the entity inside a compound are bound to this compound'
+     
+    l_node_to_recurse = set ()
+    d = {}
+    for node in l_node:
         if isinstance(node, ID):
-             # Provider hoisting
-             if d_lvl.get(node.name,lvl) >= lvl:
-                  d_id[node.name] =  compound
-                  d_lvl[node.name] = lvl
-        elif isinstance(node, Compound):
-            l_node = set(node.block_items)
-            if save_next_compound:
-                compound = node
-                save_next_compound = False
-                lvl += 1
+            if node.name in nodes_aloyed:
+                d[node.name] = compound
         elif isinstance(node, BinaryOp):
-            l_node = { node.left, node.right }
+            l_node_to_recurse |= { node.left, node.right }
         elif isinstance(node, Assignment):
-            l_node = { node.lvalue, node.rvalue }
+            l_node_to_recurse |= { node.lvalue, node.rvalue }
         elif isinstance(node, FuncCall):
-            l_node = set(node.args)
+            l_node_to_recurse |= set(node.args)
         elif isinstance(node, ExprList):
-            l_node = set(node.exprs)
-        elif isinstance(node, For):
-            l_node = { node.init,node.cond,node.next,node.stmt }
-        elif isinstance(node, If):
-            l_node = { node.iftrue, node.iffalse, node.cond }
-            save_next_compound = True
+            l_node_to_recurse |= set(node.exprs)
+        elif isinstance(node, Compound):
+            d.update(Entity2Compound(node, nodes_aloyed))
 
-        for n in l_node:
-           IdName2Compound_rec(n,d_id, d_lvl, compound, save_next_compound, lvl)
+    if l_node_to_recurse:
+        d.update(EntityInCompound_rec(l_node_to_recurse, nodes_aloyed, compound))
+
+    return d
+
+def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
+    
+    def update(d_ref,d):
+        # If the value is alread present, don't overwrite it
+        for k,v in d.items():
+            if k not in d_ref:
+                d_ref[k] = v
+        return d_ref
+
+    l = compound.block_items
+    head =  [x for x in l if not isinstance(x,(If,For))]
+    tail_if  = [x for x in l if isinstance(x,If)]
+    tail_for  = [x for x in l if isinstance(x,For)]
+
+    # Bound to this current compound
+    d = EntityInCompound_rec(head,l_entity, compound)
+    
+    
+    # All the entity in the for loop will be bound to this particular compound
+    for f in tail_for:
+        l_ast_node = [f.init,f.cond,f.next] + f.stmt.block_items
+        update(d,EntityInCompound_rec(l_ast_node, l_entity, compound))
+
+    # If statement:
+    #     - entity in the cond belong to this compound
+    #     - entity in the if  and else branches belong in this compound
+    #     - entity in one of the branch are in belong to their compound
+
+    for i in tail_if:
+        update(d, EntityInCompound_rec([i.cond],l_entity, compound))
+      
+        d_t = EntityInCompound_rec([i.iftrue], l_entity, i.iftrue)
+        update(d, {k:v for k,v in d_t.items() if v != i.iftrue} )
+        
+        d_f = EntityInCompound_rec([i.iffalse], l_entity, i.iffalse) if i.iffalse else {}
+        update(d, {k:v for k,v in d_f.items() if v != i.iffalse} )
+
+        
+        l_entity_t = set(k for k,v in d_t.items() if v == i.iftrue )
+        l_entity_f = set(k for k,v in d_f.items() if v == i.iffalse )
+
+        # The entity who are in both branch bellong to the current compound 
+        update(d, {e: compound for e in l_entity_t & l_entity_f} )
+        
+        # Update the rest with the correct compound
+        entity = set(k for k,v in d.items() if v == compound ) 
+        update(d, {e:i.iftrue for e in l_entity_t - entity} )
+        update(d, {e:i.iffalse for e in l_entity_f- entity} )
+
+    return d
 
 def provider_name(funcdef):
     if funcdef.decl.name.startswith('provide_'):
@@ -95,18 +156,18 @@ class ProvDef(FuncDef):
         return self.defined_entity - {self.name}
 
     @cached_property   
-    def d_entity_compound(self) -> Dict[EntityName,Compound]:
+    def d_entity_compound(self) -> Dict[EntityName, Set[Compound]]:
        "Filter the dictionary of IdName to only the Entity"
        # Can be done directly inside IdName2Compound_rec
-       d = {} ; d_lvl = {}
-       IdName2Compound_rec(self.funcdef.body,d,d_lvl)
-       return {name : c for name,c in d.items() if name in self.entity_to_potentially_provide} 
+       return {k : [v] for k,v in Entity2Compound(self.funcdef.body, self.entity_to_potentially_provide).items() }
 
     @cached_property
     def d_compound_entity(self) ->  Dict[Compound, Set[EntityName]]:
         from collections import defaultdict
         d_compound_entity = defaultdict(set)
-        for name, c, in self.d_entity_compound.items():
+
+        for name, lc, in self.d_entity_compound.items():
+            for c in lc:
                 d_compound_entity[c].add(name)
 
         return d_compound_entity
@@ -190,16 +251,187 @@ class IRPc(object):
         return ast
 
 #------------------------------------------------------------------------------
+
+# _____         _   _             
+#|_   _|       | | (_)            
+#  | | ___  ___| |_ _ _ __   __ _ 
+#  | |/ _ \/ __| __| | '_ \ / _` |
+#  | |  __/\__ \ |_| | | | | (_| |
+#  \_/\___||___/\__|_|_| |_|\__, |
+#                            __/ |
+#                           |___/ 
+
+import unittest
+class TestBinding(unittest.TestCase):
+
+    def src2d(self,src, argv):
+        parser = c_parser.CParser()
+        ast = parser.parse(src)
+        #return {k: v[0] for k,v in IdName2Compound_rec(ast.ext[0].body, argv).items() }
+        return Entity2Compound(ast.ext[0].body, argv)
+
+    def test_simple(self):
+        src= 'void foo(){ a = b;}'''
+        d = self.src2d(src, ['b'])
+        assert ( d['b'].block_items[0].lvalue.name == 'a')
+
+    def test_simple_function(self):
+        src= 'void foo(){ a = f(b);}'
+        d = self.src2d(src, ['b'])
+        assert ( d['b'].block_items[0].lvalue.name == 'a')
+
+    def test_conditional_one_branch(self):
+        src= 'void foo() { if (_) { a = b; } }'
+        d = self.src2d(src, ['b'])
+        assert ( d['b'].block_items[0].lvalue.name == 'a')
+
+    def test_conditional_one_branch_condition(self):
+        src= 'void foo() { if (c) { a = b; } }'
+        d = self.src2d(src, ['c'])
+        assert ( type(d['c'].block_items[0]) == If)
+
+    def test_conditional(self):
+        src= 'void foo() { if (_) { a = b; } else { a = c ; } }'
+        d = self.src2d(src, ['b','c'])
+        assert ( d['b'].block_items[0].lvalue.name == 'a')
+        assert ( d['c'].block_items[0].lvalue.name == 'a')
+
+    def test_conditional_hosting(self):
+        src= 'void foo() { if (_) { a = b; } else { a = (b + 1) ; } }'
+        d = self.src2d(src, ['b'])
+        assert ( type(d['b'].block_items[0]) == If)
+
+    def test_conditional_one_branch_hosting_before(self):
+        src= '''
+void foo() {
+   b = 10;
+   if (_) { a = b; }
+}'''
+        d = self.src2d(src, ['b'])
+        assert ( d['b'].block_items[0].lvalue.name == 'b')
+
+    def test_conditional_one_branch_hosting_after(self):
+        src= '''
+void foo() {
+   if (_) { a = b; }
+   b = 10;
+}'''
+        d = self.src2d(src, ['b'])
+        assert ( type(d['b'].block_items[0]) == If)
+
+    def test_conditional_two_branch_hosting_before(self):
+        src= '''
+void foo() {
+   b = 10;
+   if (_) { a = b; } else { a = c; }
+}'''
+        d = self.src2d(src, ['b','c'])
+        assert ( d['b'].block_items[0].lvalue.name == 'b')
+        assert ( d['c'].block_items[0].lvalue.name == 'a')
+
+    def test_for(self):
+        src= ' void foo() { for (i=1; i <10 ; i++ ) { bar(b); } }'
+        d = self.src2d(src, ['b'])
+        assert ( type(d['b'].block_items[0]) == For)
+
+    def test_nested_compound(self):
+        src= '''
+void foo() {
+   x = b;
+   { y = c; }
+}'''
+        d = self.src2d(src, ['b','c'])
+        assert ( d['b'].block_items[0].lvalue.name == 'x')
+        assert ( d['c'].block_items[0].lvalue.name == 'y')
+
+
+    def test_nested_if(self):
+        src= '''
+void foo() {
+    if (_) {
+        x = a;
+        if (_) { y = b; }
+   }
+}'''
+        d = self.src2d(src, ['a','b'])
+        assert ( d['a'].block_items[0].lvalue.name == 'x')
+        assert ( d['b'].block_items[0].lvalue.name == 'y')
+
+    def test_nested_if_hosting(self):
+        src= '''
+void foo() {
+    if (_) {
+        x = a;
+        if (_) { y = a; }
+   }
+}'''
+        d = self.src2d(src, ['a'])
+        assert ( d['a'].block_items[0].lvalue.name == 'x')
+
+    def test_nested_if_super_hosting_before(self):
+        src= '''
+void foo() {
+    x = a;
+    if (_) {
+        if (_) { y = a; }
+   }
+}'''
+        d = self.src2d(src, ['a'])
+        assert ( d['a'].block_items[0].lvalue.name == 'x')
+
+    def test_nested_if_super_hosting_after(self):
+        src= '''
+void foo() {
+    if (_) {
+        if (_) { y = a; }
+   }
+   x = a;
+}'''
+        d = self.src2d(src, ['a'])
+        assert ( type(d['a'].block_items[0]) == If )
+
+    def test_nested_if_for(self):
+        src= '''
+void foo() {
+    if (_) {
+        x = a;
+        for( _ ; _; _) { y = b;}
+   }
+}'''
+        d = self.src2d(src, ['a','b'])
+        assert ( d['a'].block_items[0].lvalue.name == 'x')
+        assert ( d['b'].block_items[0].lvalue.name == 'x')
+
+    @unittest.skip('cannot be in two scope')
+    def test_nested_if_else_2(self):
+        src= '''
+void foo() {
+    if (_) {
+        if (_) { x = a; }
+   } else { y = a; }
+}'''
+        d = self.src2d(src, ['a'])
+        assert ( d['a'].block_items[0].lvalue.name == 'x')
+
+
+#-
 if __name__ == "__main__":
+
+    try:
+        filename = sys.argv[1]
+    except:
+        unittest.main()
+    else:
+        ast = parse_file(filename, use_cpp=True,
+                        cpp_path='gcc',
+                        cpp_args=['-E'])
     
-    filename = sys.argv[1]
-
-    ast = parse_file(filename, use_cpp=True,
-            cpp_path='gcc',
-            cpp_args=['-E'])
+        a = IRPc(ast)
+        generator = c_generator.CGenerator()
+        print (generator.visit(a.new_ast))
 
 
-    a = IRPc(ast)
-    generator = c_generator.CGenerator()
-    print (generator.visit(a.new_ast))
+
+
+
 
