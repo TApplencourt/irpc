@@ -455,14 +455,14 @@ void foo() {
     def test_nested_if_super_hosting_after(self):
         src= '''
 void foo() {
-    if (_) {
-        if (_) { y = a; }
+    if (c1) {
+        if (c2) { y = a; }
    }
    x = a;
 }'''
         d = self.src2d(src, ['a'])
         assert ( len(d['a']) == 1)
-        assert ( type(d['a'][0].block_items[0]) == If )
+        assert ( d['a'][0].block_items[0].cond.name == 'c1' )
 
     def test_nested_if_for(self):
         src= '''
@@ -504,6 +504,31 @@ void foo() {
         assert ( d['a'][0].block_items[0].lvalue.name == 'x')
         assert ( d['a'][1].block_items[0].lvalue.name == 'y')
 
+    def test_nested_if_else_3(self):
+        src= '''
+void foo() {
+    if (c1) {
+        if (c2) { x = a; } 
+        else { y = a; }
+   } else { z = a; }
+   
+}'''
+        d = self.src2d(src, ['a'])
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].cond.name == 'c1')
+
+    def test_nested_if_else_4(self):
+        src= '''
+void foo() {
+    if (c1) {
+        if (c2) { x = a; }
+        else { y = a; }
+   }
+
+}'''
+        d = self.src2d(src, ['a'])
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].cond.name == 'c2')
 
 
 if __name__ == "__main__":
