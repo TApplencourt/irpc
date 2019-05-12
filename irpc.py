@@ -128,8 +128,8 @@ def Entity2Compound(compound, s_entity) -> Dict[EntityName, List[Compound]]:
         for i in tail_if:
             w |= entity2compound_simple([i.cond], w.n, compound)
 
-            w_t = entity2compound_simple([i.iftrue], w.n, i.iftrue)
-            w_f = entity2compound_simple([i.iffalse], w.n, i.iffalse) if i.iffalse else EntityWalker(w.n)
+            w_t = entity2compound_hoisting(i.iftrue, w.n)
+            w_f = entity2compound_hoisting(i.iffalse, w.n) if i.iffalse else EntityWalker(w.n)
 
             # Update the with with the union of the two
             w |= (w_t & w_f)
