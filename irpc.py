@@ -4,7 +4,7 @@ import sys, copy
 from pycparser import parse_file, c_parser, c_generator
 from pycparser.c_ast import *
 
-from typing import Dict, Set
+from typing import Dict, Set, Tuple, List
 EntityName = str
 IdName = str
 
@@ -58,25 +58,46 @@ class cached_property(object):
 #       If the same variable is used in only A statements, we bind it to all the A statements 
 #       If the same variable is used in B and A statements, we bind it the first B statements who enclose the A staments. 
 #
-def update(d_ref,d, append=True):
-        # If the value is alread present, don't overwrite it
-        for k,v in d.items():
-            if k not in d_ref:
-                d_ref[k] = v
-            elif append:
-                d_ref[k].extend(v)
+#  We split the entity into two group:
+#       - The entity who can still be hosted (maybe in the for loop body, maybe if the both branches of the conditional)
+#       - The one we can't
+#
+from typing import NamedTuple
+from collections import defaultdict
 
-        return d_ref
+class Employee():
+        def __init__(self, s = None, d = None):
+            self.s = s if s is not None else set()
+            self.d = d if d is not None else defaultdict(list)
 
-def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound]:
-    'All the entity inside a compound are bound to this compound'
-     
+        def add(self, v):
+            self.s.add(v)
+
+        def update(self,d):
+            for k,v in d.items():
+                self.d[k].extend(v)
+
+        # adding two objects
+        def __ior__(self, e):
+            self.update(e.d)
+            self.s.update(e.s)
+            return self
+
+        def __and__(self,e):
+            n = Employee(self.s & e.s, self.d)
+            n.update(e.d)
+            return n
+
+def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Tuple[Dict[IdName, Set[Compound]], 
+                                                                 Set[IdName]]:
     l_node_to_recurse = set ()
-    d = {}
+    e = Employee()
+
     for node in l_node:
         if isinstance(node, ID):
             if node.name in nodes_aloyed:
-                d[node.name] = [ compound ]
+                e.add(node.name)            
+                nodes_aloyed = nodes_aloyed - e.s
         elif isinstance(node, BinaryOp):
             l_node_to_recurse |= { node.left, node.right }
         elif isinstance(node, Assignment):
@@ -86,30 +107,35 @@ def EntityInCompound_rec(l_node,nodes_aloyed, compound) -> Dict[IdName, Compound
         elif isinstance(node, ExprList):
             l_node_to_recurse |= set(node.exprs)
         elif isinstance(node, Compound):
-            update(d,Entity2Compound(node, nodes_aloyed),True)
+            e |= Entity2Compound(node, nodes_aloyed)
+            nodes_aloyed = nodes_aloyed - e.s
 
     if l_node_to_recurse:
-        update(d,EntityInCompound_rec(l_node_to_recurse, nodes_aloyed, compound))
+        e |= EntityInCompound_rec(l_node_to_recurse, nodes_aloyed, compound)
+        nodes_aloyed = nodes_aloyed - e.s
 
-    return d
+    return e
 
-def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
-    # TODO:- Fix when and when no append when updating the dictionary
-    #      - Add more doc
-
+def Entity2Compound(compound, l_entity) -> Tuple[Dict[IdName, Set[Compound]],
+                                                 Set[IdName]]:
+    
     l = compound.block_items
     head =  [x for x in l if not isinstance(x,(If,For))]
     tail_if  = [x for x in l if isinstance(x,If)]
     tail_for  = [x for x in l if isinstance(x,For)]
 
+    
+    e = Employee()
+
     # Bound to this current compound
-    d = EntityInCompound_rec(head,l_entity, compound)
-    
-    
+    e |= EntityInCompound_rec(head,l_entity, compound)
+    l_entity = l_entity - e.s
+
     # All the entity in the for loop will be bound to this particular compound
     for f in tail_for:
         l_ast_node = [f.init,f.cond,f.next] + f.stmt.block_items
-        update(d,EntityInCompound_rec(l_ast_node, l_entity, compound))
+        e |= EntityInCompound_rec(l_ast_node, l_entity, compound)
+        l_entity  = l_entity - e.s
 
     # If statement:
     #     - entity in the cond belong to this compound
@@ -117,27 +143,26 @@ def Entity2Compound(compound, l_entity) -> Dict[IdName, Compound]:
     #     - entity in one of the branch are in belong to their compound
 
     for i in tail_if:
-        update(d, EntityInCompound_rec([i.cond],l_entity, compound))
-      
-        d_t = EntityInCompound_rec([i.iftrue], l_entity, i.iftrue)
-        update(d, {k:v for k,v in d_t.items() if i.iftrue not in v}, False )
-        
-        d_f = EntityInCompound_rec([i.iffalse], l_entity, i.iffalse) if i.iffalse else {}
-        update(d, {k:v for k,v in d_f.items() if i.iffalse not in v}, False )
+        e |= EntityInCompound_rec([i.cond],l_entity, compound)
+        l_entity = l_entity - e.s
 
-        
-        l_entity_t = set(k for k,v in d_t.items() if i.iftrue in v)
-        l_entity_f = set(k for k,v in d_f.items() if i.iffalse in v)
+        e_t = EntityInCompound_rec([i.iftrue], l_entity, i.iftrue)
+        e_f = EntityInCompound_rec([i.iffalse], l_entity, i.iffalse) if i.iffalse else Employee(set(), {})
 
-        # The entity who are in both branch bellong to the current compound 
-        update(d, {e: [compound] for e in l_entity_t & l_entity_f} )
-        
-        # Update the rest with the correct compound
-        entity = set(k for k,v in d.items() if compound in v ) 
-        update(d, {e: [i.iftrue] for e in l_entity_t - entity} )
-        update(d, {e: [i.iffalse] for e in l_entity_f- entity} )
+        # Update the with with the union of the two
+        e |=  (e_t & e_f)
+        l_entity = l_entity - e.s
 
-    return d
+        # Update the rest with the correct compound who work
+        e.update({e1: [i.iftrue] for e1 in e_t.s - e.s} )
+        e.update({e1: [i.iffalse] for e1 in e_f.s - e.s} )
+
+    return e
+
+def Entity2Compoundf(compound, s_entity):
+        en = Entity2Compound(compound, s_entity)
+        en.update({e: [compound] for e in en.s })
+        return en.d
 
 #______               _     _           
 #| ___ \             (_)   | |          
@@ -171,7 +196,7 @@ class ProvDef(FuncDef):
     @cached_property   
     def d_entity_compound(self) -> Dict[EntityName, Set[Compound]]:
        "Filter the dictionary of IdName to only the Entity"
-       return Entity2Compound(self.funcdef.body, self.entity_to_potentially_provide)
+       return Entity2Compoundf(self.funcdef.body, self.entity_to_potentially_provide)
 
     @cached_property
     def d_compound_entity(self) ->  Dict[Compound, Set[EntityName]]:
@@ -287,7 +312,7 @@ class TestBinding(unittest.TestCase):
 
     def src2d(self,src, argv):
         ast = self.parser.parse(src)
-        return Entity2Compound(ast.ext[0].body, argv)
+        return Entity2Compoundf(ast.ext[0].body, set(argv))
 
 #  __                   
 # (_  o ._ _  ._  |  _  
@@ -413,7 +438,7 @@ void foo() {
 }'''
         d = self.src2d(src, ['a','b'])
         assert ( d['a'][0].block_items[0].lvalue.name == 'x')
-        assert ( d['b'][0].block_items[0].lvalue.name == 'y')
+        assert ( d['b'][0].block_items[0].lvalue.name == 'x')
 
 
     def test_nested_if(self):
@@ -440,6 +465,18 @@ void foo() {
         assert ( len(d['a']) == 1)
         assert ( d['a'][0].block_items[0].lvalue.name == 'x')
 
+    def test_nested_if_double(self):
+        src= '''
+void foo() {
+    if (_) {
+        if (_) { x = a; }
+   } else { y = a ; }
+}'''
+        d = self.src2d(src, ['a'])
+        assert (len(d['a']) == 2 )
+        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
+        assert ( d['a'][1].block_items[0].lvalue.name == 'y')
+
     def test_nested_if_super_hosting_before(self):
         src= '''
 void foo() {
@@ -460,7 +497,7 @@ void foo() {
    }
    x = a;
 }'''
-        d = self.src2d(src, ['a'])
+        d = self.src2d(src, {'a'})
         assert ( len(d['a']) == 1)
         assert ( d['a'][0].block_items[0].cond.name == 'c1' )
 
@@ -488,9 +525,8 @@ void foo() {
     { y = a; }
 }'''
         d = self.src2d(src, ['a'])
-        assert ( len(d['a']) == 2)
-        assert ( d['a'][0].block_items[0].lvalue.name == 'x')
-        assert ( d['a'][1].block_items[0].lvalue.name == 'y')
+        assert ( len(d['a']) == 1)
+        assert ( d['a'][0].block_items[0].block_items[0].lvalue.name == 'x')
 
     def test_nested_if_else_2(self):
         src= '''
@@ -530,14 +566,10 @@ void foo() {
         assert ( len(d['a']) == 1)
         assert ( d['a'][0].block_items[0].cond.name == 'c2')
 
-
 if __name__ == "__main__":
 
-    try:
+    if len(sys.argv) > 1:
         filename = sys.argv[1]
-    except:
-        unittest.main()
-    else:
         ast = parse_file(filename, use_cpp=True,
                         cpp_path='gcc',
                         cpp_args=['-E'])
@@ -545,9 +577,6 @@ if __name__ == "__main__":
         a = IRPc(ast)
         generator = c_generator.CGenerator()
         print (generator.visit(a.new_ast))
-
-
-
-
-
+    else:
+        unittest.main()
 
