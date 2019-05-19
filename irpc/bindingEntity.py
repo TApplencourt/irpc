@@ -40,7 +40,7 @@ def entity2Compound(compound, s_entity) -> Dict[Entity, Set[Compound]]:
 
             # Not sure if needed, commenting this line
             # make all the test pass
-            # Just be clarify
+            # Need to add test who break 
             self.s = self.s - set(self.d.keys())
 
         def __ior__(self, e):
@@ -103,17 +103,17 @@ def entity2Compound(compound, s_entity) -> Dict[Entity, Set[Compound]]:
             w_t = entity2compound_hoisting(i.iftrue, w.n)
             w_f = entity2compound_hoisting(i.iffalse, w.n) if i.iffalse else EntityWalker(w.n)
 
-            # Update the with with the union of the two
+            # Update with the value who are in both branches
             w |= (w_t & w_f)
 
-            # Update the rest with the correct compound who work
+            # Update the rest with the compound who are present only on their branch
             w.extend_dict({e: {i.iftrue} for e in w_t.s - w.s})
             w.extend_dict({e: {i.iffalse} for e in w_f.s - w.s})
 
         return w
 
     w = entity2compound_hoisting(compound, s_entity)
-    #Bound the remaining entity to the current compound
+    # Bound the remaining entity to the current compound
     w.extend_dict({e: {compound} for e in w.s})
     return w.d
 

@@ -57,7 +57,7 @@ if __name__ == "__main__":
                      cpp_path='gcc',
                      cpp_args=['-E'])
 
-    l_func = {f for f in ast.ext if isinstance(f, FuncDef) }
+    l_func = { f for f in ast.ext if isinstance(f, FuncDef) }
     l_provider = { f for f in l_func if is_provider(f) }
     l_ent  = { provider_name(e) for e in l_provider }
 
