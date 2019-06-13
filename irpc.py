@@ -24,52 +24,57 @@ def is_provider(funcdef: FuncDef):
 def provider_name(provdef: ProvDef):
     return provdef.decl.name.split('provide_').pop()
 
+def flag_memo_name(entity):
+    return f'{entity}_provided'
+
 def hoist_declaration(main: FuncDef,
                       provdef: ProvDef):
 
+    # Generate "f('bool {entname} = False') 
+    def gen_memo_flag(entname):
+        entity_flag = flag_memo_name(entname)
+        type_ = TypeDecl(declname = entity_flag,
+                         quals=[], type=IdentifierType(names=['bool']))
+        return Decl(name=entity_flag, quals=[],
+                    storage=[], funcspec=[],
+                    type= type_, init= ID(name='False'),
+                    bitsize=None)
+
+
     entname = provider_name(provdef)
     l_node = provdef.body.block_items
-    _name_ = f'{entname}_provided'
-    _type_ = TypeDecl(declname=_name_, quals=[], type=IdentifierType(names=['bool']))
-    _init_ = ID(name='False')
-
-    memo_node = Decl(name=_name_,
-                     quals=[],
-                     storage=[],
-                     funcspec=[],
-                     type= _type_,
-                     init=_init_,
-                     bitsize=None)
-   
+    # Move the declaration of the entity and the top of the file
+    # All add the declaration of the flag variable for the memoization
     for i, node in enumerate(l_node):
         if isinstance(node,Decl) and node.type.declname == entname:
             node = l_node.pop(i)
             main.insert(0, node)
-            main.insert(1, memo_node)
+            main.insert(1, gen_memo_flag(entname) )
             break
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
+    # Generated "f{ if (!flag_memo_name{entity}) { call provider_{entity} ; flag_memo_name{entity} = True}
+    def gen_cached_provider_call(entity):
+              provider = f'provide_{entity}'
+              entity_flag = flag_memo_name(entity)
+              return If(cond=UnaryOp(op='!', expr=ID(name=entity_flag)),
+                        iftrue=Compound(block_items=[ FuncCall(name=ID(name=provider), args=None),
+                                                      Assignment(op='=',
+                                                                 lvalue=ID(name=entity_flag),
+                                                                 rvalue=Constant(type='bool', value='True'))]),
+
+                                                      iffalse=None)
+             
 
     if is_provider(funcdef):
         entnames = entnames - set([provider_name(funcdef)])
 
     # Insert the provider call
     for e, l_compound in entity2Compound(funcdef.body, entnames).items():
+          provider_call = gen_cached_provider_call(e)
           for compound in l_compound:
-              provider = f'provide_{e}'
-              provider_bool = f'{e}_provided'
-              prov_if = If(cond=UnaryOp(op='!', expr=ID(name=provider_bool)),
-                           iftrue=Compound(block_items=(
-                               FuncCall(name=ID(name=provider),
-                                        args=None),
-                               Assignment(op='=',
-                                          lvalue=ID(name=provider_bool),
-                                          rvalue=Constant(type='bool', value='True'))
-                           )),
-                           iffalse=None)
-
-              compound.block_items.insert(0, prov_if)
+              compound.block_items.insert(0, provider_call)
 
 if __name__ == "__main__":
 
