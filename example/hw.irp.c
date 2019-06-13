@@ -1,3 +1,5 @@
+int foo = 10;
+
 void provide_foo(){
     int foo;
     foo = 0;

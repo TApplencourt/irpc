@@ -65,7 +65,7 @@ def add_provider_call(funcdef: FuncDef,
                                         args=None),
                                Assignment(op='=',
                                           lvalue=ID(name=provider_bool),
-                                          rvalue=Constant(type='bool', value='true'))
+                                          rvalue=Constant(type='bool', value='True'))
                            )),
                            iffalse=None)
 
