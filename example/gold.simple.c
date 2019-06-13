@@ -10,7 +10,7 @@ int main()
   if (!a_provided)
   {
     provide_a();
-    a_provided = true;
+    a_provided = True;
   }
 
   printf("a = %d \n", a);
