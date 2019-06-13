@@ -24,15 +24,15 @@ def is_provider(funcdef: FuncDef):
 def provider_name(provdef: ProvDef):
     return provdef.decl.name.split('provide_').pop()
 
-def flag_memo_name(entity):
+def entity_memo_flag(entity):
     return f'{entity}_provided'
 
 def hoist_declaration(main: FuncDef,
                       provdef: ProvDef):
 
     # Generate "f('bool {entname} = False') 
-    def gen_memo_flag(entname):
-        entity_flag = flag_memo_name(entname)
+    def ast_entity_memo_flag(entname):
+        entity_flag = entity_memo_flag(entname)
         type_ = TypeDecl(declname = entity_flag,
                          quals=[], type=IdentifierType(names=['bool']))
         return Decl(name=entity_flag, quals=[],
@@ -49,15 +49,15 @@ def hoist_declaration(main: FuncDef,
         if isinstance(node,Decl) and node.type.declname == entname:
             node = l_node.pop(i)
             main.insert(0, node)
-            main.insert(1, gen_memo_flag(entname) )
+            main.insert(1, ast_entity_memo_flag(entname) )
             break
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
-    # Generated "f{ if (!flag_memo_name{entity}) { call provider_{entity} ; flag_memo_name{entity} = True}
-    def gen_cached_provider_call(entity):
+    # Generated "f{ if (!entity_memo_flag{entity}) { call provider_{entity} ; entity_memo_flag{entity} = True}
+    def ast_cached_provider_call(entity):
               provider = f'provide_{entity}'
-              entity_flag = flag_memo_name(entity)
+              entity_flag = entity_memo_flag(entity)
               return If(cond=UnaryOp(op='!', expr=ID(name=entity_flag)),
                         iftrue=Compound(block_items=[ FuncCall(name=ID(name=provider), args=None),
                                                       Assignment(op='=',
@@ -72,7 +72,7 @@ def add_provider_call(funcdef: FuncDef,
 
     # Insert the provider call
     for e, l_compound in entity2Compound(funcdef.body, entnames).items():
-          provider_call = gen_cached_provider_call(e)
+          provider_call = ast_cached_provider_call(e)
           for compound in l_compound:
               compound.block_items.insert(0, provider_call)
 
