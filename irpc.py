@@ -63,7 +63,6 @@ def add_provider_call(funcdef: FuncDef,
                                                       Assignment(op='=',
                                                                  lvalue=ID(name=entity_flag),
                                                                  rvalue=Constant(type='bool', value='True'))]),
-
                                                       iffalse=None)
              
 
