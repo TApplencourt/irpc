@@ -5,7 +5,9 @@ language: python
 python:
   - 3.7
 
-before_script: pip install pycparser
+before_script: pip install pycparser; 
 
-script: "python irpc.py example/simple.irp.c >> cur_test.c;
-diff example/gold.simple.c cur_test.c >> diff.txt; if [ -s diff.txt ] then return 0 else return 1 fi"
+script:
+  - python irpc.py example/simple.irp.c >> cur_test.c;
+  - diff example/gold.simple.c cur_test.c >> diff.txt;
+  - if [[ -s diff.txt ]]; then echo "File not empty"; else echo "File empty"; fi
