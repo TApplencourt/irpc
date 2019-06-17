@@ -8,4 +8,4 @@ python:
 before_script: pip install pycparser
 
 script: "python irpc.py example/simple.irp.c >> cur_test.c;
-diff example/gold.simple.c cur_test.c >> diff.txt; if [ -s diff.txt ] then return 1 else return 0 fi"
+diff example/gold.simple.c cur_test.c >> diff.txt; if [ -s diff.txt ] then return 0 else return 1 fi"
