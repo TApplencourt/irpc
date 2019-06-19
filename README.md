@@ -19,3 +19,10 @@
 
 [![Build Status](https://travis-ci.org/TApplencourt/irpc.svg?branch=master)](https://travis-ci.org/TApplencourt/irpc)
 
+
+# Installation 
+```
+git clone git@github.com:TApplencourt/irpc.git
+cd irpc
+pip install -r requirement.txt
+```
