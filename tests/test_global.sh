@@ -1,5 +1,5 @@
 #!/bin/bash
 
 # Output checking
-./irpc.py ./example/simple.irp.c > tests/cur_test.c;
-diff ./example/gold.simple.c tests/cur_test.c;
+./irpc.py ./examples/simple.irp.c > tests/simple.c
+diff ./tests/gold.simple.c tests/simple.c
