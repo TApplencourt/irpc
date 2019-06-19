@@ -24,5 +24,5 @@
 ```
 git clone git@github.com:TApplencourt/irpc.git
 cd irpc
-pip install -r requirement.txt
+pip install -r requirements.txt
 ```
