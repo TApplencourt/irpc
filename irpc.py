@@ -148,22 +148,6 @@ if __name__ == "__main__":
     for p in l_provider:
         hoist_declaration(ast.ext, p)
 
-    #for key, value in upward_graph.items():
-    #print(key,value)
-
-    
-       
-
-    #for t in l_touch:
-    #    print(l_touch)
-        #hoist_touch_declaration(ast.ext, t)
-    #    add_touch_call(t, l_ent)
-
-    #print(l_touch)
-
-    #print(l_provider)
-
-    #print(l_func)
     generator = c_generator.CGenerator()
     
     print(generator.visit(ast))
