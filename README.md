@@ -1,4 +1,4 @@
-# Implecement Reference to Paremeter in C
+# Implicit Reference to Paremeter in C
 
 ```
                     *
