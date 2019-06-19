@@ -66,7 +66,7 @@ def add_provider_call(funcdef: FuncDef,
              
 
     if is_provider(funcdef):
-        entnames -= {provider_name(funcdef)}
+        entnames = entnames - set([provider_name(funcdef)])
 
     # Insert the provider call
     for e, l_compound in entity2Compound(funcdef.body, entnames).items():
