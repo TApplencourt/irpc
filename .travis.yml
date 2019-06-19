@@ -12,5 +12,5 @@ install:
 
 script:
   - python -m unittest discover
-  - ./test/test_global.sh
+  - ./tests/test_global.sh
 
