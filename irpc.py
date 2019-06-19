@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import sys, copy
 from pycparser.c_ast import FuncCall, ID, Decl, TypeDecl, IdentifierType, If, UnaryOp, Compound, Assignment, Constant
 
 from irpc.irpctyping import *
@@ -78,6 +77,7 @@ def add_provider_call(funcdef: FuncDef,
 if __name__ == "__main__":
 
     from pycparser import parse_file, c_parser, c_generator
+    import sys
 
     filename = sys.argv[1]
     ast = parse_file(filename,
