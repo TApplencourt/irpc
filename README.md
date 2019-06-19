@@ -1,5 +1,9 @@
 # irpc
 
+
+[![Build Status](https://travis-ci.org/TApplencourt/irpc.svg?branch=master)](https://travis-ci.org/TApplencourt/irpc)
+
+
 Compiler to implement IRP method for C
 
 ## Requirement
