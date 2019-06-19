@@ -12,4 +12,3 @@ install:
 
 script:
   - cd tests ; ./run_test.sh
-  - 

@@ -10,4 +10,3 @@ rm -f tests/cur_test.c
 #Python unittest
 # Will run all the test*.py
 python -m unittest discover
-
