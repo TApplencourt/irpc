@@ -1,5 +1,10 @@
 int a;
-bool a_provided = False;
+bool a = False;
+void touch_a()
+{
+  bool a = True;
+}
+
 void provide_a()
 {
   a = 10;
@@ -7,14 +12,7 @@ void provide_a()
 
 int main()
 {
-  if (!a_provided)
-  {
-    provide_a();
-    a_provided = True;
-  }
-
   printf("a = %d \n", a);
   return 0;
 }
-
 
