@@ -41,12 +41,10 @@ class ASTfactory:
         return f'provide_{self.entity}'
 
     def gen_memo_flag_node(self,self_touch):
-        entity_flag = self.entity
-
         val = 'True' if self_touch else 'False'
-        type_ = TypeDecl(declname = entity_flag,
+        type_ = TypeDecl(declname = self.entity,
                          quals=[], type=IdentifierType(names=['bool']))
-        return Decl(name=entity_flag, quals=[],
+        return Decl(name=self.entity, quals=[],
                     storage=[], funcspec=[],
                     type= type_, init=ID(name=val),
                     bitsize=None)
@@ -54,6 +52,7 @@ class ASTfactory:
     @property
     def memo_flag_node_self(self):
         return self.gen_memo_flag_node(True)
+
     @property
     def memo_flag_node(self):
         return self.gen_memo_flag_node(False)
@@ -88,7 +87,6 @@ def hoist_declaration(main: FuncDef,
     entname = provider_name(provdef)
     astfactory = ASTfactory(entname)
 
-
     l_node = provdef.body.block_items
     # Move the declaration of the entity and the top of the file
     # All add the declaration of the flag variable for the memoization
@@ -106,8 +104,7 @@ def hoist_declaration(main: FuncDef,
             touch_node = astfactory.touch_definition_node
 
             # Set entity touched is_provided() to true (so the new value is used)
-            self_touch = astfactory.memo_flag_node_self
-            touch_node.body.block_items.insert(0,self_touch)
+            touch_node.body.block_items.insert(0, astfactory.memo_flag_node_self)
 
             # Create false entries for all others
             for value in adjacency_graph[entname]:
@@ -157,7 +154,6 @@ if __name__ == "__main__":
     l_ent  = { provider_name(e) for e in l_provider }
 
     adjacency_graph = gen_adjacency_graph(l_provider, l_ent)
-
 
     for f in l_func:
         add_provider_call(f, l_ent)
