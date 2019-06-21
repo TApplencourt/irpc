@@ -17,46 +17,32 @@ from collections import defaultdict
 # 1/ Generate the list of entity
 # 2/ Inside function body, insert a call to the provider before any usage of an entity.
 # 3/ Inside provider body, hoist the entity declaration
+def is_provider(funcdef: FuncDef):
+    return funcdef.decl.name.startswith('provide_')
 
+def provider_name(provdef: ProvDef):
+    return provdef.decl.name.split('provide_').pop()
 
+class ASTfactory:
 
-
-class Provider:
-
-    def __init__(self, ProvDef):
-        self.provdef = ProvDef
-
-    ######################################################################
-    # / ____|  / ____|        | |      | \ | |                           #
-    #| |      | |     ___   __| | ___  |  \| | __ _ _ __ ___   ___  _    #
-    #| |      | |    / _ \ / _` |/ _ \ | . ` |/ _` | '_ ` _ \ / _ \/ __| #
-    #| |____  | |___| (_) | (_| |  __/ | |\  | (_| | | | | | |  __/\__ \ #
-    # \_____|  \_____\___/ \__,_|\___| |_| \_|\__,_|_| |_| |_|\___||___/ #
-    ######################################################################
-
-    @property
-    def entity_name(self):
-        return self.provdef.decl.name.split('provide_').pop()
+    def __init__(self, entity):
+        self.entity = entity
 
     @property
     def memo_flag_name(self):
-        return f'{self.entity_name}_provided'
+        return f'{self.entity}_provided'
 
     @property
     def c_touch_name(self):
-        return f'touch_{self.entity_name}'
+        return f'touch_{self.entity}'
 
-    #################################################################
-    #     /\    / ____|__   __| | \ | |/ __ \|  __ \|  ____|/ ____| #
-    #    /  \  | (___    | |    |  \| | |  | | |  | | |__  | (___   #
-    #   / /\ \  \___ \   | |    | . ` | |  | | |  | |  __|  \___ \  #
-    #  / ____ \ ____) |  | |    | |\  | |__| | |__| | |____ ____) | #
-    # /_/    \_\_____/   |_|    |_| \_|\____/|_____/|______|_____/  #
-    #################################################################
+    @property
+    def provider(self):
+        return f'provide_{self.entity}'
 
     @property
     def memo_flag_node(self):
-        entity_flag = self.entity_name
+        entity_flag = self.entity
         type_ = TypeDecl(declname = entity_flag,
                          quals=[], type=IdentifierType(names=['bool']))
         return Decl(name=entity_flag, quals=[],
@@ -76,36 +62,27 @@ class Provider:
                        param_decls=None, body=Compound(block_items=[]))
 
 
-def is_provider(funcdef: FuncDef):
-    return funcdef.decl.name.startswith('provide_')
-
-def provider_name(provdef: ProvDef):
-    return provdef.decl.name.split('provide_').pop()
-
-def entity_memo_flag(entity):
-    return f'{entity}_provided'
-
-def gen_memo_flag_node(entname):
-    entity_flag = entity_memo_flag(entname) 
-    type_ = TypeDecl(declname = entity_flag,
-                     quals=[], type=IdentifierType(names=['bool']))
-    return Decl(name=entity_flag, quals=[],
-                storage=[], funcspec=[],
-                type= type_, init= ID(name='False'),
-                bitsize=None)
-
-
+    @property
+    def cached_provider_call(self):
+        provider = self.provider
+        entity_flag = self.memo_flag_name
+        return If(cond=UnaryOp(op='!', expr=ID(name=entity_flag)),
+                  iftrue=Compound(block_items=[ FuncCall(name=ID(name=provider), args=None),
+                                                Assignment(op='=',
+                                                           lvalue=ID(name=entity_flag),
+                                                           rvalue=Constant(type='bool', value='True'))]),
+                  iffalse=None)
 
 def hoist_declaration(main: FuncDef,
                       provdef: ProvDef):
 
 
     # Generate "f('bool {entname} = False') 
+    entname = provider_name(provdef)
+    astfactory = ASTfactory(entname)
 
-    provider_info = Provider(provdef)
-    entname = provider_info.entity_name
-    l_node = provider_info.provdef.body.block_items
 
+    l_node = provdef.body.block_items
     # Move the declaration of the entity and the top of the file
     # All add the declaration of the flag variable for the memoization
     for i, node in enumerate(l_node):
@@ -116,13 +93,13 @@ def hoist_declaration(main: FuncDef,
             main.insert(0, node)
 
             # is_provided Boolean
-            main.insert(1, provider_info.memo_flag_node)
+            main.insert(1, astfactory.memo_flag_node)
 
             # touch_entity function
-            modified_touch_node = provider_info.touch_definition_node
+            modified_touch_node = astfactory.touch_definition_node
 
             # Set entity touched is_provided() to true (so the new value is used)
-            self_touch = provider_info.memo_flag_node
+            self_touch = astfactory.memo_flag_node
             self_touch.init.name = 'True'
             modified_touch_node.body.block_items.insert(0,self_touch)
 
@@ -136,23 +113,12 @@ def hoist_declaration(main: FuncDef,
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
-    # Generated "f{ if (!entity_memo_flag{entity}) { call provider_{entity} ; entity_memo_flag{entity} = True}
-    def ast_cached_provider_call(entity):
-              provider = f'provide_{entity}'
-              entity_flag = entity_memo_flag(entity)
-              return If(cond=UnaryOp(op='!', expr=ID(name=entity_flag)),
-                        iftrue=Compound(block_items=[ FuncCall(name=ID(name=provider), args=None),
-                                                      Assignment(op='=',
-                                                                 lvalue=ID(name=entity_flag),
-                                                                 rvalue=Constant(type='bool', value='True'))]),
-                                                      iffalse=None)
-             
     if is_provider(funcdef):
         entnames = entnames - set([provider_name(funcdef)])
 
     # Insert the provider call
     for e, l_compound in entity2Compound(funcdef.body, entnames).items():
-          provider_call = ast_cached_provider_call(e)
+          provider_call = ASTfactory(e).cached_provider_call
           for compound in l_compound:
               if is_provider(funcdef):
                   adjacency_graph[e].add(provider_name(funcdef))
