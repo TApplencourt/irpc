@@ -74,7 +74,7 @@ class ASTfactory:
                   iffalse=None)
 
 def hoist_declaration(main: FuncDef,
-                      provdef: ProvDef):
+                      provdef: ProvDef, adjacency_graph):
 
 
     # Generate "f('bool {entname} = False') 
@@ -104,10 +104,9 @@ def hoist_declaration(main: FuncDef,
             modified_touch_node.body.block_items.insert(0,self_touch)
 
             # Create false entries for all others
-            for k, v in adjacency_graph.items():
-                if (entname == k):
-                    for value in v:
-                        modified_touch_node.body.block_items.insert(0, gen_memo_flag_node(value))
+            for value in adjacency_graph[entname]:
+                modified_touch_node.body.block_items.insert(0, gen_memo_flag_node(value))
+
             main.insert(2, modified_touch_node)
             break
 
@@ -121,9 +120,21 @@ def add_provider_call(funcdef: FuncDef,
           provider_call = ASTfactory(e).cached_provider_call
           for compound in l_compound:
               if is_provider(funcdef):
-                  adjacency_graph[e].add(provider_name(funcdef))
                   compound.block_items.insert(0, provider_call)
-        
+
+def gen_adjacency_graph(l_provider, l_ent):
+    adjacency_graph = defaultdict(set)
+    for provdef in l_provider:
+
+        entity = provider_name(provdef)
+        entnames = l_ent - set([entity])
+
+        # Insert the provider call
+        for children_entity, _ in entity2Compound(provdef.body, entnames).items():
+            adjacency_graph[entity].add(children_entity)
+
+    return adjacency_graph
+
 if __name__ == "__main__":
 
     from pycparser import parse_file, c_parser, c_generator
@@ -139,12 +150,14 @@ if __name__ == "__main__":
     l_provider = { f for f in l_func if is_provider(f) }
     l_ent  = { provider_name(e) for e in l_provider }
 
-    adjacency_graph = defaultdict(set)
+    adjacency_graph = gen_adjacency_graph(l_provider, l_ent)
+
+
     for f in l_func:
         add_provider_call(f, l_ent)
 
     for p in l_provider:
-        hoist_declaration(ast.ext, p)
+        hoist_declaration(ast.ext, p, adjacency_graph)
 
     generator = c_generator.CGenerator()
     print(generator.visit(ast))
