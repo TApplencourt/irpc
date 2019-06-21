@@ -40,16 +40,24 @@ class ASTfactory:
     def provider(self):
         return f'provide_{self.entity}'
 
-    @property
-    def memo_flag_node(self):
+    def gen_memo_flag_node(self,self_touch):
         entity_flag = self.entity
+
+        val = 'True' if self_touch else 'False'
         type_ = TypeDecl(declname = entity_flag,
                          quals=[], type=IdentifierType(names=['bool']))
         return Decl(name=entity_flag, quals=[],
                     storage=[], funcspec=[],
-                    type= type_, init=ID(name='False'),
+                    type= type_, init=ID(name=val),
                     bitsize=None)
 
+    @property
+    def memo_flag_node_self(self):
+        return self.gen_memo_flag_node(True)
+    @property
+    def memo_flag_node(self):
+        return self.gen_memo_flag_node(False)
+    
     @property
     def touch_definition_node(self):
         type_ = FuncDecl(args=None,
@@ -60,7 +68,6 @@ class ASTfactory:
                                  funcspec=[], type=type_,
                                  init=None, bitsize=None),
                        param_decls=None, body=Compound(block_items=[]))
-
 
     @property
     def cached_provider_call(self):
@@ -96,18 +103,17 @@ def hoist_declaration(main: FuncDef,
             main.insert(1, astfactory.memo_flag_node)
 
             # touch_entity function
-            modified_touch_node = astfactory.touch_definition_node
+            touch_node = astfactory.touch_definition_node
 
             # Set entity touched is_provided() to true (so the new value is used)
-            self_touch = astfactory.memo_flag_node
-            self_touch.init.name = 'True'
-            modified_touch_node.body.block_items.insert(0,self_touch)
+            self_touch = astfactory.memo_flag_node_self
+            touch_node.body.block_items.insert(0,self_touch)
 
             # Create false entries for all others
             for value in adjacency_graph[entname]:
-                modified_touch_node.body.block_items.insert(0, gen_memo_flag_node(value))
+                touch_node.body.block_items.insert(0, gen_memo_flag_node(value))
 
-            main.insert(2, modified_touch_node)
+            main.insert(2, touch_node)
             break
 
 def add_provider_call(funcdef: FuncDef,
