@@ -42,7 +42,7 @@ class ASTfactory:
 
     def gen_memo_flag_node(self,self_touch):
         val = 'True' if self_touch else 'False'
-        type_ = TypeDecl(declname = self.entity,
+        type_ = TypeDecl(declname = f'{self.entity}_provided',
                          quals=[], type=IdentifierType(names=['bool']))
         return Decl(name=self.entity, quals=[],
                     storage=[], funcspec=[],
@@ -107,20 +107,7 @@ def hoist_declaration(main: FuncDef,
 
             # is_provided Boolean
             main.insert(1, astfactory.memo_flag_node)
-
-                
-            # touch_entity function
-            touch_node = astfactory.touch_definition_node
-                    
-            # Set entity touched is_provided() to true (so the new value is used)
-            touch_node.body.block_items.insert(0, astfactory.memo_flag_node_self)
-                
-            # Create false entries for all others
-            for value in adjacency_graph[entname]:
-                touch_node.body.block_items.insert(0, astfactory.gen_memo_flag_node(value))
-                
-                main.insert(2, touch_node)
-                break
+            break
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
@@ -131,8 +118,7 @@ def add_provider_call(funcdef: FuncDef,
     for e, l_compound in entity2Compound(funcdef.body, entnames).items():
           provider_call = ASTfactory(e).cached_provider_call
           for compound in l_compound:
-              if is_provider(funcdef):
-                  compound.block_items.insert(0, provider_call)
+              compound.block_items.insert(0, provider_call)
 
 def gen_adjacency_graph(l_provider, l_ent):
     adjacency_graph = defaultdict(set)
@@ -147,14 +133,6 @@ def gen_adjacency_graph(l_provider, l_ent):
 
     return adjacency_graph
 
-
-def find_touches(filename):
-    l_touch = set()
-    with open(filename, 'r') as input:
-        for line in input:
-            if "touch_" in line and "void" not in line:
-                l_touch.add(line.strip().split("()").pop(0))
-    return(l_touch)
 
 def remove_headers(filename):
     l_headers = []
