@@ -68,7 +68,7 @@ def entity2Compound(compound, s_entity) -> Dict[Entity, Set[Compound]]:
                 l_node_to_recurse |= {node.left, node.right}
             elif isinstance(node, Assignment):
                 l_node_to_recurse |= {node.lvalue, node.rvalue}
-            elif isinstance(node, FuncCall):
+            elif isinstance(node, FuncCall) and node.args:
                 l_node_to_recurse |= set(node.args)
             elif isinstance(node, ExprList):
                 l_node_to_recurse |= set(node.exprs)
