@@ -42,7 +42,7 @@ class ASTfactory:
 
     def gen_memo_flag_node(self,self_touch):
         val = 'true' if self_touch else 'false'
-        type_ = TypeDecl(declname = f'{self.entity}_provided',
+        type_ = TypeDecl(declname = self.memo_flag_name,
                          quals=[], type=IdentifierType(names=['bool']))
         return Decl(name=self.entity, quals=[],
                     storage=[], funcspec=[],
