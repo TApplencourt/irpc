@@ -79,8 +79,16 @@ class ASTfactory:
                                                            rvalue=Constant(type='bool', value='True'))]),
                   iffalse=None)
 
+
+def touch_entity_split(touch_list):
+    touches_needed = set()
+    for i in touch_list:
+        touches_needed.add(i.split("touch_").pop(1))
+    return touches_needed
+
 def hoist_declaration(main: FuncDef,
-                      provdef: ProvDef, adjacency_graph):
+                      provdef: ProvDef,
+                      adjacency_graph):
 
 
     # Generate "f('bool {entname} = False') 
@@ -100,18 +108,19 @@ def hoist_declaration(main: FuncDef,
             # is_provided Boolean
             main.insert(1, astfactory.memo_flag_node)
 
+                
             # touch_entity function
             touch_node = astfactory.touch_definition_node
-
+                    
             # Set entity touched is_provided() to true (so the new value is used)
             touch_node.body.block_items.insert(0, astfactory.memo_flag_node_self)
-
+                
             # Create false entries for all others
             for value in adjacency_graph[entname]:
-                touch_node.body.block_items.insert(0, gen_memo_flag_node(value))
-
-            main.insert(2, touch_node)
-            break
+                touch_node.body.block_items.insert(0, astfactory.gen_memo_flag_node(value))
+                
+                main.insert(2, touch_node)
+                break
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
@@ -138,13 +147,36 @@ def gen_adjacency_graph(l_provider, l_ent):
 
     return adjacency_graph
 
+
+def find_touches(filename):
+    l_touch = set()
+    with open(filename, 'r') as input:
+        for line in input:
+            if "touch_" in line and "void" not in line:
+                l_touch.add(line.strip().split("()").pop(0))
+    return(l_touch)
+
+def remove_headers(filename):
+    l_headers = []
+    #l_headers.append(f'#include "{filename[0:-1]}h"') 
+    new_file = "headers_removed.c"
+    with open(filename, 'r') as input:
+        with open(new_file, 'w') as output:
+            for line in input:
+                if "#" in line:
+                    l_headers.append(line.rstrip())
+                else:
+                    output.write(line)
+    return(l_headers)
+
 if __name__ == "__main__":
 
     from pycparser import parse_file, c_parser, c_generator
     import sys
 
     filename = sys.argv[1]
-    ast = parse_file(filename,
+    l_headers = remove_headers(filename)
+    ast = parse_file("headers_removed.c",
                      use_cpp=True,
                      cpp_path='gcc',
                      cpp_args=['-E'])
@@ -162,4 +194,6 @@ if __name__ == "__main__":
         hoist_declaration(ast.ext, p, adjacency_graph)
 
     generator = c_generator.CGenerator()
+    for header in l_headers:
+        print(header)
     print(generator.visit(ast))
