@@ -135,29 +135,28 @@ def gen_adjacency_graph(l_provider, l_ent):
 
 
 def remove_headers(filename):
-    l_headers = []
+    l_header = ["#include <stdbool.h>\n"]
+    trim_file = []
     #l_headers.append(f'#include "{filename[0:-1]}h"') 
-    new_file = "headers_removed.c"
-    with open(filename, 'r') as input:
-        with open(new_file, 'w') as output:
-            for line in input:
-                if "#" in line:
-                    l_headers.append(line.rstrip())
-                else:
-                    output.write(line)
-    return(l_headers)
+    with open(filename, 'r') as f:
+        for line in f:
+                a = l_header if line.startswith("#include") else trim_file
+                a.append(line)
+
+    return map("".join, (l_header, trim_file))
 
 if __name__ == "__main__":
 
     from pycparser import parse_file, c_parser, c_generator
     import sys
 
+
     filename = sys.argv[1]
-    l_headers = remove_headers(filename)
-    ast = parse_file("headers_removed.c",
-                     use_cpp=True,
-                     cpp_path='gcc',
-                     cpp_args=['-E'])
+    headers, text = remove_headers(filename)
+
+    parser = c_parser.CParser()
+    ast = parser.parse(text)
+
 
     l_func = { f for f in ast.ext if isinstance(f, FuncDef) }
     l_provider = { f for f in l_func if is_provider(f) }
@@ -172,6 +171,5 @@ if __name__ == "__main__":
         hoist_declaration(ast.ext, p, adjacency_graph)
 
     generator = c_generator.CGenerator()
-    for header in l_headers:
-        print(header)
+    print(headers)
     print(generator.visit(ast))

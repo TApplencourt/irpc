@@ -1,3 +1,6 @@
+#include <stdbool.h>
+#include <stdio.h>
+
 int a;
 bool a_provided = False;
 void provide_a()
