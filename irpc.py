@@ -88,8 +88,7 @@ def touch_entity_split(touch_list):
 
 def hoist_declaration(main: FuncDef,
                       provdef: ProvDef,
-                      adjacency_graph,
-                      l_touch):
+                      adjacency_graph):
 
 
     # Generate "f('bool {entname} = False') 
@@ -109,20 +108,19 @@ def hoist_declaration(main: FuncDef,
             # is_provided Boolean
             main.insert(1, astfactory.memo_flag_node)
 
-            if entname in touch_entity_split(l_touch):
                 
-                # touch_entity function
-                touch_node = astfactory.touch_definition_node
-
-                # Set entity touched is_provided() to true (so the new value is used)
-                touch_node.body.block_items.insert(0, astfactory.memo_flag_node_self)
+            # touch_entity function
+            touch_node = astfactory.touch_definition_node
+                    
+            # Set entity touched is_provided() to true (so the new value is used)
+            touch_node.body.block_items.insert(0, astfactory.memo_flag_node_self)
                 
-                # Create false entries for all others
-                for value in adjacency_graph[entname]:
-                    touch_node.body.block_items.insert(0, astfactory.gen_memo_flag_node(value))
-
+            # Create false entries for all others
+            for value in adjacency_graph[entname]:
+                touch_node.body.block_items.insert(0, astfactory.gen_memo_flag_node(value))
+                
                 main.insert(2, touch_node)
-            break
+                break
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
@@ -160,7 +158,7 @@ def find_touches(filename):
 
 def remove_headers(filename):
     l_headers = []
-    l_headers.append(f'#include "{filename[0:-1]}h"') 
+    #l_headers.append(f'#include "{filename[0:-1]}h"') 
     new_file = "headers_removed.c"
     with open(filename, 'r') as input:
         with open(new_file, 'w') as output:
@@ -193,7 +191,7 @@ if __name__ == "__main__":
         add_provider_call(f, l_ent)
 
     for p in l_provider:
-        hoist_declaration(ast.ext, p, adjacency_graph, l_touch)
+        hoist_declaration(ast.ext, p, adjacency_graph)
 
     generator = c_generator.CGenerator()
     for header in l_headers:

@@ -12,11 +12,15 @@ void provide_a(){
 
 void provide_N(){
     int N;
+    a = 100000;
+    touch_a();
     N = 10;
 }
 
 void provide_b(){
     int b;
+    c = 100;
+    touch_N();
     b = 10;
     if (foo == 0) {
        for (int i=0; i++; i < N){
@@ -27,7 +31,9 @@ void provide_b(){
 
 int main()
 {
-   printf("b = %d \n",b);
-   return 0;
+  b = 2030;
+  touch_b();
+  printf("b = %d \n",b);
+  return 0;
 }
 
