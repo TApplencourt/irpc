@@ -41,7 +41,7 @@ class ASTfactory:
         return f'provide_{self.entity}'
 
     def gen_memo_flag_node(self,self_touch):
-        val = 'True' if self_touch else 'False'
+        val = 'true' if self_touch else 'false'
         type_ = TypeDecl(declname = f'{self.entity}_provided',
                          quals=[], type=IdentifierType(names=['bool']))
         return Decl(name=self.entity, quals=[],
@@ -76,7 +76,7 @@ class ASTfactory:
                   iftrue=Compound(block_items=[ FuncCall(name=ID(name=provider), args=None),
                                                 Assignment(op='=',
                                                            lvalue=ID(name=entity_flag),
-                                                           rvalue=Constant(type='bool', value='True'))]),
+                                                           rvalue=Constant(type='bool', value='true'))]),
                   iffalse=None)
 
 
