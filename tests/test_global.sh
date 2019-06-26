@@ -7,5 +7,5 @@
 diff ./tests/gold.simple.c tests/simple.c
 
 ## Header Removal + Reinjection
-./irpc.py ./examples/headers_rem_test.c > tests/header_rem.c
-diff ./tests/gold.headers_rem.c tests/header_rem.c
+./irpc.py ./tests/header_rem_test.c > tests/header_rem.c
+diff ./tests/gold.header_rem.c tests/header_rem.c
