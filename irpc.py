@@ -80,12 +80,6 @@ class ASTfactory:
                   iffalse=None)
 
 
-def touch_entity_split(touch_list):
-    touches_needed = set()
-    for i in touch_list:
-        touches_needed.add(i.split("touch_").pop(1))
-    return touches_needed
-
 def hoist_declaration(main: FuncDef,
                       provdef: ProvDef,
                       adjacency_graph):
@@ -120,8 +114,8 @@ def add_provider_call(funcdef: FuncDef,
           for compound in l_compound:
               compound.block_items.insert(0, provider_call)
 
-def gen_adjacency_graph(l_provider, l_ent):
-    adjacency_graph = defaultdict(set)
+def gen_par_adjacency_graph(l_provider, l_ent):
+    par_adjacency_graph = defaultdict(set)
     for provdef in l_provider:
 
         entity = provider_name(provdef)
@@ -129,9 +123,51 @@ def gen_adjacency_graph(l_provider, l_ent):
 
         # Insert the provider call
         for children_entity, _ in entity2Compound(provdef.body, entnames).items():
-            adjacency_graph[entity].add(children_entity)
+            par_adjacency_graph[entity].add(children_entity)
 
-    return adjacency_graph
+    return par_adjacency_graph
+
+def gen_child_adjacency_graph(l_provider, l_ent):
+    child_adjacency_graph = defaultdict(set)
+
+    for provdef in l_provider:
+        entity = provider_name(provdef)
+        entnames = l_ent - set([entity])
+
+        for parent_entity, _ in entity2Compound(provdef.body, entnames).items():
+            child_adjacency_graph[parent_entity].add(entity)
+
+    return child_adjacency_graph
+
+
+def find_touches(filename):
+    l_touch = set()
+    with open(filename, 'r') as input:
+        for line in input:
+            if "touch_" in line:
+                l_touch.add(line.strip().split("()").pop(0))
+    return(l_touch)
+
+def insert_touch(filename, list_touches):
+    new_file = "touch_insert.c"
+    #header_file = f'{filename[0:-1]}h'
+    with open(filename, 'r') as input:
+        with open(new_file, 'w') as output:
+            #with open(header_file, 'w') as header:
+            for touch_call in list_touches:
+                output.write(f'void {touch_call}();' + '\n')
+                #output.write(f'void {touch_call}' + '(){ \n}\n')
+
+            for line in input:
+                output.write(line)
+
+def hoist_touch_def(entity,
+                adjacency_graph,
+                main: FuncDef):
+    touch_node = ASTfactory(entity).touch_definition_node
+    for ent_touched in sorted(adjacency_graph[entity]):
+        touch_node.body.block_items.insert(1,ASTfactory(ent_touched).memo_flag_node)
+    main.insert(len(main)-1, touch_node)
 
 
 def remove_headers(filename):
@@ -153,6 +189,8 @@ if __name__ == "__main__":
 
     filename = sys.argv[1]
     headers, text = remove_headers(filename)
+    l_touch = find_touches(filename)
+
 
     parser = c_parser.CParser()
     ast = parser.parse(text)
@@ -160,15 +198,19 @@ if __name__ == "__main__":
 
     l_func = { f for f in ast.ext if isinstance(f, FuncDef) }
     l_provider = { f for f in l_func if is_provider(f) }
+    l_sorted_provider = sorted(l_provider, key=provider_name, reverse=True)
     l_ent  = { provider_name(e) for e in l_provider }
 
-    adjacency_graph = gen_adjacency_graph(l_provider, l_ent)
+    adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
 
     for f in l_func:
         add_provider_call(f, l_ent)
 
     for p in l_provider:
         hoist_declaration(ast.ext, p, adjacency_graph)
+
+    for t in l_touch:
+        hoist_touch_def(t.split("touch_").pop(), adjacency_graph, ast.ext)
 
     generator = c_generator.CGenerator()
     print(headers)
