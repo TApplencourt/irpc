@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from pycparser.c_ast import FuncCall, FuncDef, FuncDecl, ID, Decl, TypeDecl, IdentifierType, If, UnaryOp, Compound, Assignment, Constant
+from pycparser.c_ast import FuncCall, For, While, FuncDef, Return, FuncDecl, ExprList, ID, Decl, TypeDecl, IdentifierType, If, BinaryOp, UnaryOp, Compound, Assignment, Constant, Switch, Case
 
 from irpc.irpctyping import *
 from irpc.bindingEntity import entity2Compound
@@ -103,6 +103,70 @@ def hoist_declaration(main: FuncDef,
             main.insert(1, astfactory.memo_flag_node)
             break
 
+def node_extract(node):
+    if isinstance(node, Compound):
+        return node.block_items
+    elif isinstance(node, If):
+        return node.iftrue.block_items + node.iffalse.block_items
+    elif isinstance(node, For):
+        return node.stmt.block_items
+    elif isinstance(node, While):
+        return node.stmt.block_items
+    elif isinstance(node, FuncDef):
+        return node.body.block_items
+    elif isinstance(node, ( Switch, Case ) ):
+        return node.stmts
+    elif isinstance(node, BinaryOp):
+        return [node.left, node.right]
+    elif isinstance(node, FuncCall):
+        return [node.args]
+    elif isinstance(node, Assignment):
+        return [node.lvalue, node.rvalue]
+    elif isinstance(node, ExprList):
+        return node.exprs
+    elif  isinstance(node, (ID, Constant, FuncCall, Return, Decl)):
+        return []
+
+
+def find_instances(astnode, l_ent, old_compound = None, idx_old_compound = 0):
+    """
+    Recursively search through AST to locate all instances of ID nodes
+
+    Args:
+        param1: Node to be analyzed (ie. FuncDef, Compound, etc)
+        param2: Placeholder for current compounds parent (None by default)
+        param3: Cached index to maintain integrity of value across recurses (Default 0: ie. No cache)
+
+    Returns:
+        Returns a dict of all Compounds containing instances of entity w/ provider
+    """
+
+    # If there is no previous compound (ie. Head node)
+    if not old_compound:
+        # Old compound is set to passed head node
+        old_compound = astnode
+
+    # d holds all compounds with appropriate index values based on entity occurences
+    d = defaultdict(list)
+
+    # Recurses through elements in body of head node
+    for i, node in enumerate(node_extract(astnode)):
+
+        # Append any entries of ID node names to d so long as it is a function with a provider 
+        if isinstance(node, ID) and node.name in 'b':
+            d[node.name].append( (old_compound, idx_old_compound))
+
+        # If anything but instance of ID -> recurse 
+        else:
+            # If Compound: New compound = node & j (index of inner compound) is initialized to 0
+            # Else: Recurse over same compound as before with index value used for old compound
+            c, j  = (node, 0) if isinstance(node, Compound) else (old_compound, i)
+
+            # Recursive call followed by updating the dictionary
+            for k,v in find_instances(node, l_ent, c, j).items():
+                d[k] += v
+
+    return d
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
     if is_provider(funcdef):
