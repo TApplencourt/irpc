@@ -250,15 +250,13 @@ def remove_headers(filename):
 
 def insert_provider_call(funcdef: FuncDef,
                          instance_dict):
-    print(instance_dict)
     for entity, instances in instance_dict.items():
-        #print(instances)
         for inst in instances:
-            #print(inst)
+            print(inst)
             node = inst[0]
             index = inst[1]
             provider_call = ASTfactory(entity).cached_provider_call
-            node.body.block_items[index] = provider_call 
+            node.body.block_items.insert(index, provider_call)
             break
             # if node_extract(node) != []:
             #     print(1)
