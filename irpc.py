@@ -107,19 +107,13 @@ def node_extract(node):
     if isinstance(node, Compound):
         return node.block_items
     elif isinstance(node, If):
-        if node.iffalse:
-            return node.iftrue.block_items + node.iffalse.block_items
-        else:
-            return node.iftrue.block_items
-    # if node.iffalse.block_items return node.iftrue.block_items + node.iffalse.block_items else: return node.iftrue.block_items
-    elif isinstance(node, For):
-        return node.stmt.block_items
-    elif isinstance(node, While):
-        return node.stmt.block_items
+        return [node.iftrue, node.iffalse]
+    elif isinstance(node, (While, For) ):
+        return node.stmt
     elif isinstance(node, FuncDef):
-        return node.body.block_items
+        return node.body
     elif isinstance(node, ( Switch, Case ) ):
-        return node.stmts
+        return [node.stmts]
     elif isinstance(node, BinaryOp):
         return [node.left, node.right]
     elif isinstance(node, FuncCall):
@@ -127,12 +121,11 @@ def node_extract(node):
     elif isinstance(node, Assignment):
         return [node.lvalue, node.rvalue]
     elif isinstance(node, ExprList):
-        return node.exprs
+        return [node.exprs]
     elif  isinstance(node, (ID, Constant, FuncCall, Return, Decl)):
         return []
     else:
         return []
-
 
 def find_instances(astnode, l_ent, _type_, old_compound = None, idx_old_compound = 0):
     """
@@ -148,7 +141,7 @@ def find_instances(astnode, l_ent, _type_, old_compound = None, idx_old_compound
     """
 
     # If there is no previous compound (ie. Head node)
-    if not old_compound:
+    if old_compound is None and isinstance(astnode,Compound):
         # Old compound is set to passed head node
         old_compound = astnode
 
@@ -158,20 +151,22 @@ def find_instances(astnode, l_ent, _type_, old_compound = None, idx_old_compound
     # Recurses through elements in body of head node
     for i, node in enumerate(node_extract(astnode)):
 
-        # Append any entries of ID node names to d so long as it is a function with a provider 
-        if isinstance(node, _type_) and node.name in l_ent:
-            d[node.name].append( (old_compound, idx_old_compound))
+        # Append any entries of ID node names to d so long as it is a function with a provider
+        if isinstance(node, _type_):
+            if node.name in l_ent:
+                if d[node.name] == [] or ( d[node.name][-1] != (old_compound, idx_old_compound) ):
+                    d[node.name].insert(0, (old_compound, idx_old_compound))
 
-        # If anything but instance of ID -> recurse 
+        # If anything but instance of ID -> recurse
         else:
             # If Compound: New compound = node & j (index of inner compound) is initialized to 0
             # Else: Recurse over same compound as before with index value used for old compound
             c, j  = (node, 0) if isinstance(node, Compound) else (old_compound, i)
-
             # Recursive call followed by updating the dictionary
             for k,v in find_instances(node, l_ent, _type_, c, j).items():
-                d[k] += v
+                d[k] =  v + d[k]
     return d
+
 
 def add_provider_call(funcdef: FuncDef,
                       entnames: Set[Entity]):
@@ -245,65 +240,26 @@ def remove_headers(filename):
         for line in f:
                 a = l_header if line.startswith("#include") else trim_file
                 a.append(line)
-
     return map("".join, (l_header, trim_file))
 
 def insert_provider_call(funcdef: FuncDef,
                          instance_dict):
-    print(instance_dict)
     for entity, instances in instance_dict.items():
-        #print(instances)
-        for inst in instances:
-            #print(inst)
-            node = inst[0]
-            index = inst[1]
-            provider_call = ASTfactory(entity).cached_provider_call
-            node.body.block_items[index] = provider_call 
-            break
-            # if node_extract(node) != []:
-            #     print(1)
-            #     if isinstance(node, FuncDef):
-            #         if entity != provider_name(node):
-            #             node.body.block_items.insert(index, provider_call)
-            #             continue
-            #     elif isinstance(node, If):
-            #         print(node)
-            #         node.iftrue.block_items.insert(index, provider_call)
-            #     else:
-            #         print(type(node))
-            #         node_items = node_extract(node)
-            #         node_items.insert(index, provider_call)
-            #         node.block_items = node_items
-            #         continue
-
-            #else:
-            #    break
-   #             funcdef.body.block_items.insert(0, inst[0])
-# def insert_provider_call(compound: Compound,
-#                          entity,
-#                          index):
-#     l_node = compound.block_items
-#     for i, node in enumerate(l_node):
-#         if node_extract(node) != []:
-#             insert_provider_call(node_extract(node), entity, index)
-#         else:
-#             provider_call = ASTfactory(entity).cached_provider_call
-
+        provider_call = ASTfactory(entity).cached_provider_call
+        for compound, index in instances:
+            compound.block_items.insert(index, provider_call)
 
 if __name__ == "__main__":
 
     from pycparser import parse_file, c_parser, c_generator
     import sys
 
-
     filename = sys.argv[1]
     headers, text = remove_headers(filename)
     l_touch = find_touches(filename)
 
-
     parser = c_parser.CParser()
     ast = parser.parse(text)
-
 
     l_func = { f for f in ast.ext if isinstance(f, FuncDef) }
     l_provider = { f for f in l_func if is_provider(f) }
@@ -313,9 +269,8 @@ if __name__ == "__main__":
     adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
 
     for f in l_func:
-        #add_provider_call(f, l_ent)
-        insert_provider_call(f, find_instances(f, l_ent, ID))
-        #print(find_instances(f, l_ent, ID))
+        insert_provider_call(f, find_instances(f.body, l_ent - set(provider_name(f)), ID))
+
     for p in l_provider:
         hoist_declaration(ast.ext, p, adjacency_graph)
 
