@@ -15,6 +15,7 @@ int main()
     provide_a();
     a_provided = true;
   }
+
   printf("a = %d\n", a);
   return 0;
 }

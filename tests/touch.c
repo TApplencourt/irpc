@@ -22,10 +22,11 @@ void provide_b()
   a = 20;
   touch_a();
   if (!a_provided)
-    {
-      provide_a();
-      a_provided = true;
-    }
+  {
+    provide_a();
+    a_provided = true;
+  }
+
   b = a;
 }
 

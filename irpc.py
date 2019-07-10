@@ -69,6 +69,11 @@ class ASTfactory:
                        param_decls=None, body=Compound(block_items=[]))
 
     @property
+    def touch_declaration_node(self):
+        return FuncDecl(args=None,
+                        type=TypeDecl(declname=self.c_touch_name,
+                                      quals=[], type=IdentifierType(names=['void'])))
+    @property
     def cached_provider_call(self):
         provider = self.provider
         entity_flag = self.memo_flag_name
@@ -84,12 +89,10 @@ def hoist_declaration(main: FuncDef,
                       provdef: ProvDef,
                       adjacency_graph):
 
-
-    # Generate "f('bool {entname} = False') 
     entname = provider_name(provdef)
     astfactory = ASTfactory(entname)
-
     l_node = provdef.body.block_items
+
     # Move the declaration of the entity and the top of the file
     # All add the declaration of the flag variable for the memoization
     for i, node in enumerate(l_node):
@@ -105,7 +108,7 @@ def hoist_declaration(main: FuncDef,
 
 def node_extract(node):
     if isinstance(node, Compound):
-        return node.block_items
+        return node
     elif isinstance(node, If):
         return [node.iftrue, node.iffalse]
     elif isinstance(node, (While, For) ):
@@ -120,9 +123,13 @@ def node_extract(node):
         return [node.args]
     elif isinstance(node, Assignment):
         return [node.lvalue, node.rvalue]
+    elif isinstance(node, ID):
+        return [node]
     elif isinstance(node, ExprList):
-        return [node.exprs]
-    elif  isinstance(node, (ID, Constant, FuncCall, Return, Decl)):
+        return node.exprs
+    elif isinstance(node, FuncCall) and node.args:
+        return node.args
+    elif  isinstance(node, (Return, Decl, Constant)):
         return []
     else:
         return []
@@ -156,7 +163,6 @@ def find_instances(astnode, l_ent, _type_, old_compound = None, idx_old_compound
             if node.name in l_ent:
                 if d[node.name] == [] or ( d[node.name][-1] != (old_compound, idx_old_compound) ):
                     d[node.name].insert(0, (old_compound, idx_old_compound))
-
         # If anything but instance of ID -> recurse
         else:
             # If Compound: New compound = node & j (index of inner compound) is initialized to 0
@@ -208,34 +214,24 @@ def find_touches(filename):
     l_touch = set()
     with open(filename, 'r') as input:
         for line in input:
-            if "touch_" in line:
+            if line.strip().startswith("touch_"):
                 l_touch.add(line.strip().split("()").pop(0))
     return(l_touch)
 
-def insert_touch(filename, list_touches):
-    new_file = "touch_insert.c"
-    #header_file = f'{filename[0:-1]}h'
-    with open(filename, 'r') as input:
-        with open(new_file, 'w') as output:
-            #with open(header_file, 'w') as header:
-            for touch_call in list_touches:
-                output.write(f'void {touch_call}();' + '\n')
-                #output.write(f'void {touch_call}' + '(){ \n}\n')
-
-            for line in input:
-                output.write(line)
-
-def hoist_touch_def(entity,
+def hoist_touch(entity,
                 adjacency_graph,
                 main: FuncDef):
-    touch_node = ASTfactory(entity).touch_definition_node
+    touch_def = ASTfactory(entity).touch_definition_node
+    touch_decl = ASTfactory(entity).touch_declaration_node
     for ent_touched in sorted(adjacency_graph[entity]):
-        touch_node.body.block_items.insert(1,ASTfactory(ent_touched).memo_flag_node)
-    main.insert(len(main)-1, touch_node)
+        touch_def.body.block_items.insert(1,ASTfactory(ent_touched).memo_flag_node)
+    main.insert(len(main)-1, touch_def)
+    main.insert(0, touch_decl)
+
+
 def remove_headers(filename):
-    l_header = ["#include <stdbool.h>\n"]
+    l_header = []
     trim_file = []
-    #l_headers.append(f'#include "{filename[0:-1]}h"') 
     with open(filename, 'r') as f:
         for line in f:
                 a = l_header if line.startswith("#include") else trim_file
@@ -269,13 +265,14 @@ if __name__ == "__main__":
     adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
 
     for f in l_func:
-        insert_provider_call(f, find_instances(f.body, l_ent - set(provider_name(f)), ID))
+        l_ent_adjusted = (l_ent - set(provider_name(f)) if is_provider(f) else l_ent)
+        insert_provider_call(f, find_instances(f.body, l_ent_adjusted, ID))
 
     for p in l_provider:
         hoist_declaration(ast.ext, p, adjacency_graph)
 
     for t in l_touch:
-        hoist_touch_def(t.split("touch_").pop(), adjacency_graph, ast.ext)
+        hoist_touch(t.split("touch_").pop(), adjacency_graph, ast.ext)
 
     generator = c_generator.CGenerator()
     print(headers)
