@@ -89,11 +89,13 @@ def find_touches(filename):
                 l_touch.add(line.strip().split("()").pop(0))
     return l_touch
 
-def hoist_touch(entity,
-                adjacency_graph,
-                main: FuncDef):
-    touch_def = ASTfactory(entity).touch_definition_node
-    touch_decl = ASTfactory(entity).touch_declaration_node
+def gen_touch_declaration(entity,
+                          adjacency_graph,
+                          main: FuncDef):
+
+    astfact =  ASTfactory(entity)
+    touch_def = astfact.touch_definition_node
+    touch_decl = astfact.touch_declaration_node
     
     for ent_touched in sorted(adjacency_graph[entity]):
         touch_def.body.block_items.insert(1,ASTfactory(ent_touched).memo_flag_node)
@@ -166,7 +168,7 @@ if __name__ == "__main__":
                 compound.block_items.insert(len(compound.block_items), provider_call)
 
     for t in l_touch:
-        hoist_touch(t.split("touch_").pop(), adjacency_graph, ast.ext)
+        gen_touch_declaration(t.split("touch_").pop(), adjacency_graph, ast.ext)
 
     generator = c_generator.CGenerator()
     print(headers)
