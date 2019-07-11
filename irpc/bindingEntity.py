@@ -169,7 +169,6 @@ def entity2CompoundSimple(astnode, l_ent, _type_, old_compound = None, idx_old_c
 
     # Recurses through elements in body of head node
     for i, node in enumerate(node_extract(astnode)):
-        #print (i, node)
         if isinstance(node, Compound):
             old_compound = node
 
@@ -196,7 +195,8 @@ def touch2entity(astnode,l_ent, old_compound=None, old_entity=None):
             old_compound = node.stmt 
 
         if isinstance(node, FuncCall) and node.name.name.startswith('touch_'):
-            d[ old_compound ] |= old_entity - set([node.name.name.split("touch_").pop()])
+            entity_touched = node.name.name.split("touch_").pop()
+            d[ (entity_touched, old_compound) ] |= old_entity - set([entity_touched])
         else:
             for k,v in touch2entity(node, l_ent, old_compound, old_entity).items():
                 d[k] |= v

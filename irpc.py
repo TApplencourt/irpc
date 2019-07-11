@@ -81,14 +81,6 @@ def gen_child_adjacency_graph(l_provider, l_ent):
 
     return child_adjacency_graph
 
-def find_touches(filename):
-    l_touch = set()
-    with open(filename, 'r') as input:
-        for line in input:
-            if line.strip().startswith("touch_") and line.strip().endswith("();"):
-                l_touch.add(line.strip().split("()").pop(0))
-    return l_touch
-
 def gen_touch_declaration(entity,
                           adjacency_graph,
                           main: FuncDef):
@@ -148,8 +140,6 @@ if __name__ == "__main__":
     l_provider = { f for f in l_func if is_provider(f) }
     l_sorted_provider = sorted(l_provider, key=provider_name, reverse=True)
     l_ent  = { provider_name(e) for e in l_provider }
-    l_touch = find_touches(filename)
-
 
     adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
 
@@ -161,14 +151,16 @@ if __name__ == "__main__":
         hoist_declaration(ast.ext, p, adjacency_graph)
 
     # When touching inside a while / for statement should ensure that the entity in statement are reprovided
+    l_touch = set()
     for p in l_func:
-        for compound, l_e in touch2entity(p,l_ent).items():
+        for (entity_touched, compound), l_e in touch2entity(p,l_ent).items():
             for e in sorted(l_e):
                 provider_call = ASTfactory(e).cached_provider_call
                 compound.block_items.insert(len(compound.block_items), provider_call)
+            l_touch.add(entity_touched)
 
-    for t in l_touch:
-        gen_touch_declaration(t.split("touch_").pop(), adjacency_graph, ast.ext)
+    for t in sorted(l_touch):
+        gen_touch_declaration(t, adjacency_graph, ast.ext)
 
     generator = c_generator.CGenerator()
     print(headers)
