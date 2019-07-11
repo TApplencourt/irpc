@@ -250,7 +250,7 @@ def insert_provider_call(funcdef: FuncDef,
         d_idx_entity = d[compound]
         for index in sorted(d_idx_entity, reverse=True):
             l_entity = d_idx_entity[index]
-            for entity in l_entity:
+            for entity in sorted(l_entity):
                 provider_call = ASTfactory(entity).cached_provider_call
                 compound.block_items.insert(index, provider_call)
 

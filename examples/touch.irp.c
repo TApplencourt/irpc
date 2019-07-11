@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 void provide_a(){
   int a;
   a = 10;
