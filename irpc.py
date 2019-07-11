@@ -228,22 +228,35 @@ def hoist_touch(entity,
     main.insert(len(main)-1, touch_def)
     main.insert(0, touch_decl)
 
-
 def remove_headers(filename):
-    l_header = []
+    l_header = ['#include <stdbool.h>\n']
     trim_file = []
     with open(filename, 'r') as f:
         for line in f:
-                a = l_header if line.startswith("#include") else trim_file
-                a.append(line)
+            if 'stdbool' in line:
+                continue
+            a = l_header if line.startswith("#include") else trim_file
+            a.append(line)
     return map("".join, (l_header, trim_file))
 
 def insert_provider_call(funcdef: FuncDef,
                          instance_dict):
+
+    # Entity:List[ Tuple[Idx, Compount]]
+    #-> 
+    # Compound:[Idx]:Set[Entity]
+    d = defaultdict(lambda: defaultdict(set))
     for entity, instances in instance_dict.items():
-        provider_call = ASTfactory(entity).cached_provider_call
         for compound, index in instances:
-            compound.block_items.insert(index, provider_call)
+                d[compound][index].add(entity)
+
+    for compound in d:
+        d_idx_entity = d[compound]
+        for index in sorted(d_idx_entity, reverse=True):
+            l_entity = d_idx_entity[index]
+            for entity in l_entity:
+                provider_call = ASTfactory(entity).cached_provider_call
+                compound.block_items.insert(index, provider_call)
 
 if __name__ == "__main__":
 
