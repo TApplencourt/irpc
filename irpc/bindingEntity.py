@@ -159,10 +159,17 @@ def entity2CompoundSimple(astnode, l_ent, _type_, old_compound = None, idx_old_c
         Returns a dict of all Compounds containing instances of entity w/ provider
     """
     # d holds all compounds with appropriate index values based on entity occurences
-    d = defaultdict(list)
+    if isinstance(astnode, _type_) and astnode.name in l_ent:
+        return {astnode.name : { (old_compound, idx_old_compound) } }
+
+    d = defaultdict(set)
+
+    if isinstance(astnode, Compound):
+                old_compound = astnode
+
     # Recurses through elements in body of head node
     for i, node in enumerate(node_extract(astnode)):
-
+        #print (i, node)
         if isinstance(node, Compound):
             old_compound = node
 
@@ -171,12 +178,29 @@ def entity2CompoundSimple(astnode, l_ent, _type_, old_compound = None, idx_old_c
         # Append any entries of ID node names to d so long as it is a function with a provider
         if isinstance(node, _type_):
             if node.name in l_ent:
-                if d[node.name] == [] or ( d[node.name][-1] != (old_compound, idx_old_compound) ):
-                    d[node.name].append( (old_compound, idx_old_compound) )
+                #if d[node.name] == [] or ( d[node.name][-1] != (old_compound, idx_old_compound) ):
+                d[node.name].add( (old_compound, idx_old_compound) )
         # If anything but instance of ID -> recurse
         else:
             # Recursive call followed by updating the dictionary
             for k,v in entity2CompoundSimple(node, l_ent, _type_, old_compound, idx_old_compound).items():
-                d[k] += v
+                d[k] |= v
     return d
+
+# Find the compound associated to the touch
+def touch2entity(astnode,l_ent, old_compound=None, old_entity=None):
+    d = defaultdict(set)
+    for i, node in enumerate(node_extract(astnode)):
+        if isinstance(node, (While, For ) ):
+            old_entity = set(entity2CompoundSimple(node.cond, l_ent, ID))
+            old_compound = node.stmt 
+
+        if isinstance(node, FuncCall) and node.name.name.startswith('touch_'):
+            d[ old_compound ] |= old_entity - set([node.name.name.split("touch_").pop()])
+        else:
+            for k,v in touch2entity(node, l_ent, old_compound, old_entity).items():
+                d[k] |= v
+
+    return d
+
 

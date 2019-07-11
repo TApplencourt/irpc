@@ -3,7 +3,7 @@
 from pycparser.c_ast import FuncCall, For, While, FuncDef, Return, FuncDecl, ExprList, ID, Decl, TypeDecl, IdentifierType, If, BinaryOp, UnaryOp, Compound, Assignment, Constant, Switch, Case
 
 from irpc.irpctyping import *
-from irpc.bindingEntity import entity2Compound, entity2CompoundSimple
+from irpc.bindingEntity import entity2Compound, entity2CompoundSimple, touch2entity
 from irpc.ASTfactory import ASTfactory
 
 from collections import defaultdict
@@ -87,15 +87,17 @@ def find_touches(filename):
         for line in input:
             if line.strip().startswith("touch_") and line.strip().endswith("();"):
                 l_touch.add(line.strip().split("()").pop(0))
-    return(l_touch)
+    return l_touch
 
 def hoist_touch(entity,
                 adjacency_graph,
                 main: FuncDef):
     touch_def = ASTfactory(entity).touch_definition_node
     touch_decl = ASTfactory(entity).touch_declaration_node
+    
     for ent_touched in sorted(adjacency_graph[entity]):
         touch_def.body.block_items.insert(1,ASTfactory(ent_touched).memo_flag_node)
+    
     main.insert(len(main)-1, touch_def)
     main.insert(0, touch_decl)
 
@@ -136,7 +138,6 @@ if __name__ == "__main__":
 
     filename = sys.argv[1]
     headers, text = remove_headers(filename)
-    l_touch = find_touches(filename)
 
     parser = c_parser.CParser()
     ast = parser.parse(text)
@@ -145,6 +146,8 @@ if __name__ == "__main__":
     l_provider = { f for f in l_func if is_provider(f) }
     l_sorted_provider = sorted(l_provider, key=provider_name, reverse=True)
     l_ent  = { provider_name(e) for e in l_provider }
+    l_touch = find_touches(filename)
+
 
     adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
 
@@ -154,6 +157,13 @@ if __name__ == "__main__":
 
     for p in l_sorted_provider:
         hoist_declaration(ast.ext, p, adjacency_graph)
+
+    # When touching inside a while / for statement should ensure that the entity in statement are reprovided
+    for p in l_func:
+        for compound, l_e in touch2entity(p,l_ent).items():
+            for e in sorted(l_e):
+                provider_call = ASTfactory(e).cached_provider_call
+                compound.block_items.insert(len(compound.block_items), provider_call)
 
     for t in l_touch:
         hoist_touch(t.split("touch_").pop(), adjacency_graph, ast.ext)

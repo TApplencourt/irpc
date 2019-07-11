@@ -27,7 +27,6 @@ int main(){
     while ( (x- x_next) > 1.e-9) {
         x = x_next;
         touch_x();
-        x_next ;
     }
     printf("x convergerded %f\n", x);
 }

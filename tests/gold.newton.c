@@ -110,7 +110,6 @@ int main()
       x_next_provided = true;
     }
 
-    x_next;
   }
 
   if (!x_provided)
