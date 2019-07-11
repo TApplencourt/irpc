@@ -1,5 +1,5 @@
 from irpc.irpctyping import *
-from pycparser.c_ast import Compound, ID, If, For, BinaryOp, Assignment, FuncCall, ExprList
+from pycparser.c_ast import FuncCall, For, While, FuncDef, Return, FuncDecl, ExprList, ID, Decl, TypeDecl, IdentifierType, If, BinaryOp, UnaryOp, Compound, Assignment, Constant, Switch, Case
 
 #       __ ___    _
 #  /\  (_   |    | \  _   _  _  _  ._ _|_
@@ -116,3 +116,67 @@ def entity2Compound(compound, s_entity) -> Dict[Entity, Set[Compound]]:
     # Bound the remaining entity to the current compound
     w.extend_dict({e: {compound} for e in w.s})
     return w.d
+
+
+def node_extract(node):
+    if isinstance(node, Compound):
+        return node.block_items
+    elif isinstance(node, If):
+        return [node.iftrue, node.iffalse]
+    elif isinstance(node, (While, For) ):
+        return [ node.cond, node.stmt ]
+    elif isinstance(node, FuncDef):
+        return [ node.body ]
+    elif isinstance(node, ( Switch, Case ) ):
+        return [node.stmts]
+    elif isinstance(node, BinaryOp):
+        return [node.left, node.right]
+    elif isinstance(node, Assignment):
+        return [node.lvalue, node.rvalue]
+    elif isinstance(node, ID):
+        return [node.name]
+    elif isinstance(node, ExprList):
+        return node.exprs
+    elif isinstance(node, FuncCall) and node.args:
+        return node.args
+    elif  isinstance(node, (Return, Decl, Constant)):
+        return []
+    elif isinstance(node, UnaryOp):
+        return [ node.expr ]
+    else:
+        return []
+
+def entity2CompoundSimple(astnode, l_ent, _type_, old_compound = None, idx_old_compound = 0):
+    """
+    Recursively search through AST to locate all instances of ID nodes
+
+    Args:
+        param1: Node to be analyzed (ie. FuncDef, Compound, etc)
+        param2: Placeholder for current compounds parent (None by default)
+        param3: Cached index to maintain integrity of value across recurses (Default 0: ie. No cache)
+
+    Returns:
+        Returns a dict of all Compounds containing instances of entity w/ provider
+    """
+    # d holds all compounds with appropriate index values based on entity occurences
+    d = defaultdict(list)
+    # Recurses through elements in body of head node
+    for i, node in enumerate(node_extract(astnode)):
+
+        if isinstance(node, Compound):
+            old_compound = node
+
+        if isinstance(astnode, Compound):
+            idx_old_compound = i
+        # Append any entries of ID node names to d so long as it is a function with a provider
+        if isinstance(node, _type_):
+            if node.name in l_ent:
+                if d[node.name] == [] or ( d[node.name][-1] != (old_compound, idx_old_compound) ):
+                    d[node.name].append( (old_compound, idx_old_compound) )
+        # If anything but instance of ID -> recurse
+        else:
+            # Recursive call followed by updating the dictionary
+            for k,v in entity2CompoundSimple(node, l_ent, _type_, old_compound, idx_old_compound).items():
+                d[k] += v
+    return d
+
