@@ -19,8 +19,10 @@ class TestBinding(unittest.TestCase):
     def test_simple(self):
         src = 'void foo(){ _ = a;}' ''
         d = self.src2d(src, ['a'])
-        assert(d["a"][0][0].block_items[0].rvalue.name == "a")
-        assert(d["a"][0][1] == 0)
+        
+        compound = d["a"].pop()
+        assert(compound[0].block_items[0].rvalue.name == "a")
+        assert(compound[1] == 0)
 
 
 if __name__ == "__main__":
