@@ -141,12 +141,11 @@ if __name__ == "__main__":
     l_sorted_provider = sorted(l_provider, key=provider_name, reverse=True)
     l_ent  = { provider_name(e) for e in l_provider }
 
-    adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
-
     for f in l_func:
         l_ent_adjusted = l_ent - set([provider_name(f)] if is_provider(f) else () )
         insert_provider_call(f, entity2CompoundSimple(f, l_ent_adjusted, ID))
 
+    adjacency_graph = gen_child_adjacency_graph(l_provider, l_ent)
     for p in l_sorted_provider:
         hoist_declaration(ast.ext, p, adjacency_graph)
 
