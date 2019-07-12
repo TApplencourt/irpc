@@ -120,7 +120,7 @@ def entity2Compound(compound, s_entity) -> Dict[Entity, Set[Compound]]:
 
 def node_extract(node):
     if isinstance(node, Compound):
-        return node.block_items
+        return node.block_items if node.block_items else []
     elif isinstance(node, If):
         return [node.iftrue, node.iffalse]
     elif isinstance(node, (While, For) ):
@@ -158,12 +158,13 @@ def entity2CompoundSimple(astnode, l_ent, _type_, old_compound = None, idx_old_c
     Returns:
         Returns a dict of all Compounds containing instances of entity w/ provider
     """
+
     # d holds all compounds with appropriate index values based on entity occurences
     if isinstance(astnode, _type_) and astnode.name in l_ent:
         return {astnode.name : { (old_compound, idx_old_compound) } }
 
     d = defaultdict(set)
-
+    
     if isinstance(astnode, Compound):
                 old_compound = astnode
 
