@@ -4,6 +4,8 @@ from pycparser.c_ast import *
 from collections import defaultdict
 from irpc.ASTfactory import ASTfactory
 import operator
+from itertools import chain
+
 
 class Function():
    def __init__(self, funcdef):
@@ -49,8 +51,7 @@ class CommWorld():
 
     @cached_property
     def s_entity(self):
-        from itertools import chain
-        return set(chain.from_iterable(self.s_provider))
+        return set(chain.from_iterable(p.s_entity for p in self.s_provider))
 
     @cached_property
     def d_entity2provider(self):
